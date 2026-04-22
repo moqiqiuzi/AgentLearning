@@ -1,0 +1,39 @@
+# 创建知识库项目目录
+mkdir -p ~/ai-knowledge-base
+cd ~/ai-knowledge-base
+
+# 初始化 Git
+git init
+
+# 创建基本目录结构
+mkdir -p .opencode/agents .opencode/skills knowledge/raw knowledge/articles
+
+------------------------------------------------------------------------------------------------
+用AI编程工具生成AGENTS.md 用glm5，一开始用4.6效果不太好
+···
+请帮我为一个 AI 知识库助手项目创建 AGENTS.md 文件。
+
+项目需求：
+- 自动从 GitHub Trending 和 Hacker News 采集 AI/LLM/Agent 领域的技术动态
+- AI 分析后结构化存储为 JSON
+- 支持多渠道分发（Telegram/飞书）
+
+请在 AGENTS.md 中包含：
+1. 项目概述（一段话说清楚做什么）
+2. 技术栈：Python 3.12、OpenCode + 国产大模型、LangGraph、OpenClaw
+3. 编码规范：PEP 8、snake_case、Google 风格 docstring、禁止裸 print()
+4. 项目结构：.opencode/agents/、.opencode/skills/、knowledge/raw/、knowledge/articles/
+5. 知识条目的 JSON 格式（包含 id、title、source_url、summary、tags、status 等字段）
+6. Agent 角色概览表格（采集/分析/整理三个角色）
+7. 红线（绝对禁止的操作）
+···
+--------------------------------------------------------------------------------------------------
+可以对不理解 的内容进行提问
+例如：
+请解释 AGENTS.md 中各部分的作用：
+`1. 为什么需要"红线"部分？`
+`2. "知识条目格式"这段 JSON 定义有什么用？`
+`3. AGENTS.md 和普通的 README.md 有什么区别？`
+或者
+请告诉我这个项目的技术栈和编码规范
+---------------------------------------------------------------------------------------------------

@@ -1,0 +1,54 @@
+Specify ：specs/project-vision.md
+----------------------------------
+# AI 知识库 · 项目愿景 v0.1
+
+## 要做什么
+- 每天抓取 GitHub Trending（? 多少条 · 只 AI 相关？）
+- 用 Agent 分析内容（? 分析什么 · 输出啥）
+- 输出知识条目（? JSON 还是 Markdown · 字段有哪些）
+
+## 不做什么
+
+## 边界 & 验收
+
+## 怎么验证
+------------------------------------
+Clarify
+我有一份初版spec 在@\AgentLearning\part01\specs\project-vision.md，每个?就是我没想清楚的点，请你扮演一个严苛的产品评审，一个一个追问，每问一个我答一个，问完把spec改成终态版
+
+（问啥都让ai决定）
+
+Impement
+按照specs/project-vision.md的终态版，生成一份对应的AGENTS.md初稿，放在project root，严格对其spec的每个条款
+最后verify一下
+
+----------------------------------------------------------------------------------------------------------------------------
+Specify：specs/coding-standards.md
+-------------------------------------
+# AI 知识库 · 编码规范 v0.1
+
+## 要做什么
+- Python 用 black 格式化
+- TypeScript strict mode
+- 所有公开函数必须有文档
+
+## 不做什么
+- 不用任何魔法字符串
+- 不允许 TODO 提交到 main
+
+## 边界 & 验收
+- 单测覆盖率 ≥ 80%
+
+## 怎么验证
+- CI 上跑 lint + 单测
+-------------------------------------
+
+Clarify
+read specs/coding-standards.md
+这是我写的编码规范，准备放进AGENTS.md
+请grill me relentlessly,追问每一条漏洞
+
+Impement
+把终态 spec/coding-standards.md 合并进AGENTS.md的"编码规范"段
+----------------------------------------------------------------------------------------------------------------------------
+
