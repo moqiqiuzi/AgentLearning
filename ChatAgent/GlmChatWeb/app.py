@@ -804,6 +804,29 @@ def api_werewolf_role_configs():
     return jsonify({"configs": {str(k): v for k, v in WEREWOLF_ROLE_CONFIGS.items()}, "roles": WEREWOLF_ROLE_INFO})
 
 
+def _return_game(game, user, user_mode):
+    if werewolf_config.WEREWOLF_CONFIG.get("enable_role_memory"):
+        game["config"]["use_emotions"] = True
+    if user_mode == "player":
+        up = next((p for p in game["players"] if p.get("is_user")), None)
+        if up:
+            user_role = up["role"]
+            ri = WEREWOLF_ROLE_INFO.get(user_role, {})
+            return jsonify({
+                "ok": True,
+                "game_id": game["id"],
+                "players": [{"name": p["name"], "seat": p["seat"], "gender": p.get("gender", "male")} for p in game["players"]],
+                "user_role": user_role,
+                "user_role_icon": ri.get("icon", "👤"),
+                "user_role_name": ri.get("name", "村民"),
+            })
+    return jsonify({
+        "ok": True,
+        "game_id": game["id"],
+        "players": [{"name": p["name"], "seat": p["seat"], "role": p["role"], "gender": p.get("gender", "male")} for p in game["players"]],
+    })
+
+
 @app.route("/api/werewolf/start", methods=["POST"])
 @login_required
 def api_werewolf_start():
@@ -812,10 +835,33 @@ def api_werewolf_start():
     total = data.get("total", 9)
     user_mode = data.get("user_mode", "god")
     theme = data.get("theme")
+    themes = data.get("themes")
     persona_names = data.get("personas")
     speech_mode = data.get("speech_mode", "free")
 
-    if theme and theme in WEREWOLF_THEMES:
+    user_persona = None
+    if user_mode == "player":
+        user_persona = {"name": user["username"], "prompt": f"你是{user['username']}，一个参与狼人杀游戏的玩家。"}
+
+    if themes and isinstance(themes, list) and len(themes) > 1:
+        mixed_chars = []
+        for t_name in themes:
+            if t_name in WEREWOLF_THEMES:
+                mixed_chars.extend(WEREWOLF_THEMES[t_name]["characters"])
+            else:
+                custom_themes = db.get_custom_themes(user["id"])
+                ct = next((t for t in custom_themes if t["name"] == t_name), None)
+                if ct:
+                    mixed_chars.extend(ct["characters"])
+        if mixed_chars:
+            random.shuffle(mixed_chars)
+            game, err = werewolf.create_game(total, user_mode, "混合", mixed_chars, user_persona, speech_mode=speech_mode)
+            if err:
+                return jsonify({"ok": False, "msg": err})
+            return _return_game(game, user, user_mode)
+        else:
+            return jsonify({"ok": False, "msg": "所选主题没有角色"})
+    elif theme and theme in WEREWOLF_THEMES:
         pass
     elif theme == "自由模式" or theme == "free":
         theme = None
@@ -836,30 +882,11 @@ def api_werewolf_start():
         random.shuffle(enabled)
         persona_names = [p["name"] for p in enabled[:total]]
 
-    user_persona = None
-    if user_mode == "player":
-        user_persona = {"name": user["username"], "prompt": f"你是{user['username']}，一个参与狼人杀游戏的玩家。"}
-
     game, err = werewolf.create_game(total, user_mode, theme, persona_names, user_persona, speech_mode=speech_mode)
     if err:
         return jsonify({"ok": False, "msg": err})
 
-    if werewolf_config.WEREWOLF_CONFIG.get("enable_role_memory"):
-        game["config"]["use_emotions"] = True
-
-    if user_mode == "player":
-        up = next((p for p in game["players"] if p["is_user"]), None)
-        if up:
-            user_role = up["role"]
-            ri = WEREWOLF_ROLE_INFO.get(user_role, {})
-            return jsonify({
-                "ok": True,
-                "game_id": game["id"],
-                "players": [{"name": p["name"], "seat": p["seat"], "gender": p.get("gender", "male")} for p in game["players"]],
-                "user_role": user_role,
-                "user_role_icon": ri.get("icon", "👤"),
-                "user_role_name": ri.get("name", "村民"),
-            })
+    return _return_game(game, user, user_mode)
 
     return jsonify({
         "ok": True,
@@ -1236,60 +1263,37 @@ def _execute_day_cycle(game):
     if game["game_over"]:
         return
 
-    speeches_data = []
-    speech_prompts = []
-    user_speech_idx = None
     for i, p in enumerate(alive):
-        prompt = werewolf.build_speech_prompt(game, p["name"], i + 1, len(alive))
-        if not prompt:
-            speeches_data.append(None)
-            continue
-        speech_prompts.append((i, p, prompt))
-        speeches_data.append(None)
-        if p.get("is_user") and game["config"].get("user_mode") == "player":
-            user_speech_idx = i
-
-    def _gen_speech(idx, p, prompt):
-        return idx, _call_llm_text(prompt, temperature=0.7)
-
-    if user_speech_idx is not None:
-        for i, p, prompt in speech_prompts:
-            if i == user_speech_idx:
-                game["user_action"] = None
-                yield _sse(game, {'event': 'speech_start', 'player': p['name'], 'order': i + 1})
-                yield _sse(game, {'event': 'user_speech_request', 'player': p['name']})
-                waited = 0
-                while game["user_action"] is None and waited < 120:
-                    time.sleep(0.3)
-                    waited += 0.3
-                ua = game.get("user_action") or {}
-                game["user_action"] = None
-                if ua.get("action") == "user_speech" and ua.get("text", "").strip():
-                    speech = ua["text"].strip()
-                else:
-                    speech = _call_llm_text(prompt, temperature=0.7)
-                speeches_data[i] = (p, speech)
-                break
-
-    non_user_prompts = [(i, p, pr) for i, p, pr in speech_prompts if i != user_speech_idx]
-    if non_user_prompts:
-        with ThreadPoolExecutor(max_workers=min(len(non_user_prompts), 4)) as pool:
-            futs = {pool.submit(_gen_speech, i, p, pr): i for i, p, pr in non_user_prompts}
-            for fut in as_completed(futs):
-                i, speech = fut.result()
-                p = non_user_prompts[[x[0] for x in non_user_prompts].index(i)][1]
-                speeches_data[i] = (p, speech)
-
-    for i, sd in enumerate(speeches_data):
         if game["game_over"]:
             break
-        if sd is None:
-            continue
-        p, speech = sd
-        yield _sse(game, {'event': 'speech_start', 'player': p['name'], 'order': i + 1})
-        if speech:
-            werewolf.add_speech(game, p["name"], speech)
-            yield _sse(game, {'event': 'speech', 'player': p['name'], 'text': speech})
+
+        if p.get("is_user") and game["config"].get("user_mode") == "player":
+            prompt = werewolf.build_speech_prompt(game, p["name"], i + 1, len(alive))
+            game["user_action"] = None
+            yield _sse(game, {'event': 'speech_start', 'player': p['name'], 'order': i + 1})
+            yield _sse(game, {'event': 'user_speech_request', 'player': p['name']})
+            waited = 0
+            while game["user_action"] is None and waited < 120:
+                time.sleep(0.3)
+                waited += 0.3
+            ua = game.get("user_action") or {}
+            game["user_action"] = None
+            if ua.get("action") == "user_speech" and ua.get("text", "").strip():
+                speech = ua["text"].strip()
+            else:
+                speech = _call_llm_text(prompt, temperature=0.7) if prompt else ""
+            if speech:
+                werewolf.add_speech(game, p["name"], speech)
+                yield _sse(game, {'event': 'speech', 'player': p['name'], 'text': speech})
+        else:
+            prompt = werewolf.build_speech_prompt(game, p["name"], i + 1, len(alive))
+            if not prompt:
+                continue
+            yield _sse(game, {'event': 'speech_start', 'player': p['name'], 'order': i + 1})
+            speech = _call_llm_text(prompt, temperature=0.7)
+            if speech:
+                werewolf.add_speech(game, p["name"], speech)
+                yield _sse(game, {'event': 'speech', 'player': p['name'], 'text': speech})
 
     if game["game_over"]:
         return

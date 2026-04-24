@@ -109,13 +109,12 @@ def _select_characters(theme, persona_names, total):
             {"name": f"角色{i}", "prompt": f"你是{theme}世界中的一个角色。"}
             for i in range(len(chars), total)
         ]
-    if persona_names and len(persona_names) >= total:
-        return [{"name": n, "prompt": ""} for n in persona_names[:total]]
     if persona_names:
-        result = [{"name": n, "prompt": ""} for n in persona_names]
-        for i in range(len(result), total):
-            result.append({"name": f"玩家{i+1}", "prompt": ""})
-        return result
+        is_dict_list = isinstance(persona_names, list) and len(persona_names) > 0 and isinstance(persona_names[0], dict)
+        if is_dict_list:
+            return [{"name": c["name"], "prompt": c.get("prompt", ""), "gender": c.get("gender", "male")} for c in persona_names[:total]]
+        else:
+            return [{"name": n, "prompt": ""} for n in persona_names[:total]]
     names = [f"玩家{i+1}" for i in range(total)]
     return [{"name": n, "prompt": ""} for n in names]
 
