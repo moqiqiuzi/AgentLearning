@@ -22,7 +22,7 @@ import random
 import urllib.request
 from datetime import datetime
 
-API_KEY = os.environ.get("ZHIPU_API_KEY", "db27fa7efe6a419894014eae9c498cc2.ode5wHj3eGNJP73Z")
+API_KEY = os.environ.get("ZHIPU_API_KEY", "db27fa7efe6a419894014eae9c498cc2.--")
 API_URL = "https://open.bigmodel.cn/api/anthropic/v1/messages"
 
 PERSONAS = {
