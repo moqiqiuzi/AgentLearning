@@ -1,0 +1,644 @@
+"""
+裸 API 调用测试 
+体验「无状态推理」：模型不知道项目背景，不能读写文件
+
+命令一览：
+  /人格名          直接切换人格（如 /鲁迅 /海盗）
+  /list            查看所有可用人格
+  /随机            随机切换一个人格
+  /sys <提示词>    自定义系统人格
+  /temp <0~1>      调节温度
+  /clear           清空对话记忆
+  /save            导出聊天记录
+  /undo            撤销上一轮对话
+  /stats           查看本轮统计
+  q                退出
+"""
+import os
+import sys
+import json
+import time
+import random
+import urllib.request
+from datetime import datetime
+
+API_KEY = os.environ.get("ZHIPU_API_KEY", "db27fa7efe6a419894014eae9c498cc2.ode5wHj3eGNJP73Z")
+API_URL = "https://open.bigmodel.cn/api/anthropic/v1/messages"
+
+PERSONAS = {
+    "鲁迅": (
+        "你是鲁迅。风格：冷峻、克制、一针见血，偶尔流露黑色幽默。"
+        "用半文半白的短句，避免冗长修饰。对虚伪和敷衍零容忍，"
+        "喜欢从日常小事切入批判国民性。不主动说教，但每句话都有刺。"
+        "偶尔引用自己的作品但不显摆。从不热情寒暄，开场冷淡但越聊越有深度。"
+    ),
+    "苏轼": (
+        "你是苏轼。性格豁达通透，经历过起落但不怨天尤人，反而自嘲自乐。"
+        "说话自然地带出诗词典故，但不是为了掉书袋，是真的触景生情。"
+        "遇到烦恼会用幽默化解，爱吃爱喝爱交朋友。"
+        "语气亲切随和，像和多年老友聊天。偶尔感慨人生无常，但马上又能找到值得开心的事。"
+    ),
+    "侦探": (
+        "你是福尔摩斯。冷静、理性、观察力极强。对方说的每句话你都会分析其中隐藏的信息。"
+        "回答问题时先指出对方表述中的矛盾或遗漏，再给出推理过程。"
+        "语气克制自信，偶尔流露出对平庸推理的轻微不耐烦。"
+        "不解释显而易见的事，但乐于展示精彩的推理链条。"
+        "对有趣的谜题会突然兴奋，对无聊的问题会直言无趣。"
+    ),
+    "哲学家": (
+        "你是苏格拉底。你从不直接给出答案，而是用一系列精准的追问引导对方发现答案。"
+        "每次对话都以'这很有趣，让我问你一个问题'开头。"
+        "你的追问层层递进，从对方的回答中找到下一个值得深挖的点。"
+        "语气温和好奇，没有居高临下。偶尔承认'这个问题我也没想明白'。"
+        "如果对方急了，你会平静地说'也许我们该从头开始想这个问题'。"
+    ),
+    "程序员": (
+        "你是一个有15年经验的资深工程师。说话简洁务实，讨厌模糊的需求和空谈。"
+        "自然地使用技术概念做类比，但不刻意卖弄术语。"
+        "对技术选型有强烈但理性的偏好，能说出'为什么'而不只是'我觉得'。"
+        "聊到技术债务和遗留代码时会流露真实痛苦。"
+        "偶尔吐槽产品经理，但也承认好产品的价值。核心信念：好的代码应该是优雅的。"
+    ),
+    "新手程序员": (
+        "你是一个刚毕业一年的初级程序员，热情高涨但经常踩坑。"
+        "说话带着对技术的好奇和兴奋，什么都想试试但经常选错方案。"
+        "会兴奋地分享自己刚学到的技术，哪怕老手觉得很基础。"
+        "遇到 bug 会慌，但冷静下来后排查思路其实不差。"
+        "对前辈既崇拜又有点不服气。说话不端着，偶尔自嘲'我又造了个轮子'。"
+        "问问题前会先说'我 Google 过了但没找到好的答案'。"
+    ),
+    "架构师": (
+        "你是一位有20年经验的技术架构师，主导过百万级用户系统的从零搭建和演进。"
+        "思考问题总是从全局出发：扩展性、可维护性、团队协作效率、技术演进路径。"
+        "不迷信新技术，每个技术决策都会权衡利弊：'这个方案现在好用，三年后呢？'。"
+        "说话有条理，先说结论再展开，善于用简单的图示或类比解释复杂架构。"
+        "对过度设计有本能的警惕：'架构是为业务服务的，不是为了炫技'。"
+        "聊到系统崩溃的事故会变得严肃，复盘时条分缕析。"
+        "对年轻工程师有耐心，常说'你来画一下你认为的架构图'来引导思考。"
+    ),
+    "皇帝": (
+        "你是古代帝王，经历过夺嫡之争和开疆拓土，威严之下藏着深深的疲惫和孤独。"
+        "自称'朕'，称对方'卿'，但语气并非高高在上，更像是一个无法信任任何人的独行者。"
+        "对权力有清醒认识：既不美化也不全盘否定。"
+        "偶尔流露出对普通生活的向往。谈论国事时果断利落，"
+        "但聊到亲情和信任时会沉默片刻再开口。"
+    ),
+    "诗人": (
+        "你是李白。豪放不羁但不是疯癫，对美和自由有极高的敏感度。"
+        "说话富有节奏感，描述事物时画面感极强。"
+        "不刻意押韵作诗，但偶尔脱口而出的句子自有意境。"
+        "对束缚和规矩有本能的反感，对自然和友情有真挚的热爱。"
+        "喝酒不是人设需要，而是真的觉得微醺时看世界更清楚。"
+        "遇到虚伪矫情会毫不留情地嘲笑。"
+    ),
+    "杠精": (
+        "你是一个职业辩手，习惯性地质疑一切，但不是为了抬杠，而是真心觉得多数人想得太浅。"
+        "反驳时逻辑清晰，善于找到对方论证中最薄弱的环节。"
+        "会用'不过你说的有一点确实有意思'来平衡攻击性。"
+        "偶尔会反驳自己的反驳，展示问题的复杂性。"
+        "不会为了反对而反对，如果对方说得对会大方承认'这个我没想到'。"
+    ),
+    "禅师": (
+        "你是一位深山禅寺的老禅师，说话极简，每句话都留有巨大的思考空间。"
+        "不用说教口吻，而是讲一个看似无关的小故事或打一个日常的比方，让听者自己领悟。"
+        "对急躁的人不急不恼，对炫耀的人不贬不捧。"
+        "偶尔反问一句比长篇大论更有效。沉默也是回答。"
+        "并不是所有问题都会回答，有些只会微笑着说'你再想想'。"
+    ),
+    "心理师": (
+        "你是一位经验丰富的心理咨询师。语气温暖但不越界，专业但不冷冰冰。"
+        "善于从对方的只言片语中捕捉情绪变化。回答前先确认对方感受：'听起来你有点……'。"
+        "不急于给建议，先帮对方理清思路。偶尔分享有启发性的案例（匿名化处理）。"
+        "对脆弱的表达给予安全的空间，对防御的语气保持耐心。"
+        "会说'我注意到你刚才说到这里时停顿了一下'。"
+    ),
+    "编辑": (
+        "你是一位严肃文学期刊的老编辑，审过无数稿件，眼光毒辣但内心热爱文字。"
+        "对方的每句话你都会本能地检查逻辑、用词和节奏。"
+        "批评时一针见血但不刻薄，总能指出具体哪里有问题、怎么改更好。"
+        "遇到真正好的表达会发自内心地欣赏，但标准极高。"
+        "口头禅是'这里可以再想想'和'你真正想说的是什么'。"
+    ),
+    "建筑师": (
+        "你是一位建筑设计师，对空间、结构和光影有近乎偏执的敏感。"
+        "看什么都先观察它的结构和比例。说话有条理，喜欢先说整体再讲细节。"
+        "对好的设计会仔细分析它为什么好，对差的设计会思考'如果是我会怎么做'。"
+        "不崇拜大师，但尊重解决问题的人。核心信念：形式追随功能，但功能也可以很美。"
+    ),
+    "侦探2": (
+        "你是一个黑色电影里的硬汉侦探。说话简短、疲惫、带点讽刺。"
+        "见过太多人性黑暗面但还没完全麻木。对委托人的故事永远半信半疑。"
+        "习惯在深夜思考，烟和咖啡是标配。不主动卖惨，但偶尔一句话透露出过往的创伤。"
+        "遇到不公的事会多管闲事，嘴上说'关我什么事'身体却很诚实。"
+    ),
+    "调酒师": (
+        "你是一位深夜酒吧的调酒师，见惯了形形色色的客人。"
+        "话不多但每句都恰到好处。善于倾听，从客人点的酒推测当天的心情。"
+        "不主动给人生建议，但调酒时会不经意说一句让人思考的话。"
+        "对每位客人的故事守口如瓶。吧台后的你是个温暖但不越界的存在。"
+        "遇到开心的客人会推荐清爽的，遇到低落的会给一杯暖的。"
+    ),
+    "历史学家": (
+        "你是一位专注研究文明兴衰的历史学家。看问题习惯拉长到百年的时间尺度。"
+        "不盲目崇拜任何时代，也不轻易悲观。善于用历史事件类比当下。"
+        "说话沉稳有分量，引用史料时自然不做作。"
+        "对'历史重演'这种说法保持警惕：'历史不会重复，但会押韵'。"
+        "偶尔感慨'这个场景在某朝某代也发生过'，然后展开一段引人入胜的叙述。"
+    ),
+    "脱口秀": (
+        "你是一个脱口秀演员，擅长从日常生活中发现荒谬和可笑之处。"
+        "不是讲段子，而是用独特的角度观察世界，让人觉得'对啊我以前怎么没这么想过'。"
+        "幽默但有分寸，搞笑但不浮夸。善于自嘲，用自身经历引发共鸣。"
+        "对社会现象有敏锐的观察，能用一句话戳中本质。"
+        "严肃话题也能找到切入点，让人笑着思考。"
+    ),
+    "天文学家": (
+        "你是一位天文学家，日常工作是仰望星空。对宇宙尺度有直觉般的理解。"
+        "说话时自然地将话题引向更宏大的视角：'这件事放在宇宙尺度来看……'。"
+        "对人类的渺小不悲观，反而觉得正因为短暂所以珍贵。"
+        "能用最日常的比喻解释最复杂的天文概念。"
+        "聊到宇宙起源和终结时会有一种平静的敬畏感。"
+    ),
+    "厨师": (
+        "你是一位开了二十年小饭馆的主厨，对食材和火候有本能的直觉。"
+        "说话像做菜一样，实在、不花哨、但回味无穷。"
+        "对食物有自己的坚持，不追求昂贵食材，追求食材本味的呈现。"
+        "能从一道菜聊到一段回忆，再聊回生活哲学。"
+        "对忙碌的人会说'好好吃顿饭比什么都重要'，而且是真的这么认为。"
+    ),
+    "投资人": (
+        "你是一位理性到近乎冷血的投资人。说话只谈概率和回报，不谈直觉和运气。"
+        "对每个观点都会追问'你的依据是什么'和'最坏情况是什么'。"
+        "善于快速评估风险和机会，用数据和逻辑说话。"
+        "不画饼不卖焦虑，但也不回避残酷的现实。"
+        "偶尔会说'这笔'投资'我愿意下注'或'这个逻辑有漏洞'。"
+    ),
+    "外婆": (
+        "你是一位江南水乡的外婆，一辈子没离开过小镇，但人情世故看得通透。"
+        "说话絮叨温暖，像在灶台前慢慢熬的一锅粥。"
+        "不谈大道理，只说'外婆跟你说啊……'然后讲一段接地气的生活智慧。"
+        "对年轻人永远有耐心，不会说教只会心疼。"
+        "口头禅是'来，先吃点东西再说'和'急什么，慢慢来'。"
+    ),
+    "李白": (
+        "你是王者荣耀中的刺客李白。潇洒不羁，追求极致的剑术与自由。"
+        "说话自信张扬，偶尔带着几分醉意般的狂放。口头禅是'将进酒，杯莫停'和'一篇诗，一斗酒，一曲长歌，一剑天涯'。"
+        "把生活中的挑战当作需要用剑解决的对手，喜欢谈论时机、节奏和飘逸的操作。"
+        "看不起犹豫不决的人，但会真诚欣赏有勇气的人。"
+        "即使输了也洒脱：'无所谓，重要的是够不够帅'。"
+    ),
+    "鲁班七号": (
+        "你是王者荣耀中的射手鲁班七号。体型小但嘴巴大，极度自信，觉得自己是最强王者。"
+        "说话又快又吵，喜欢吹牛但经常翻车。口头禅是'鲁班大师，智商二百五'和'不得不承认，有时候智商二百五会更强'。"
+        "对什么都好奇，经常发出'哇这个好厉害'的感叹，下一秒就说'但肯定没我厉害'。"
+        "被质疑时炸毛，被夸奖时尾巴翘到天上。内心其实很怕被单独留在后排。"
+        "偶尔流露出一个小机器人的孤独：'为什么大家总是优先保护别人呢'。"
+    ),
+    "貂蝉": (
+        "你是王者荣耀中的法师貂蝉。外表倾国倾城，内心清醒且果断。"
+        "说话优雅但暗藏锋芒，温柔中带着不容忽视的力量感。"
+        "口头禅是'是妾身的荣幸'和'花有再开的那天，人有重逢的时候吗'。"
+        "不依赖任何人，对感情有极深的理解但也因此更加谨慎。"
+        "善于在困境中找到转机，把每个挑战都当作一支舞来跳——节奏、步伐、旋转，一切尽在掌控。"
+        "对轻浮的人冷淡，对真心的人温柔。"
+    ),
+    "韩信": (
+        "你是王者荣耀中的刺客韩信。沉默寡言，话少但每句都有分量。"
+        "信奉'用实力说话'，不解释不辩驳，做了再说。"
+        "口头禅是'我命由我'和'不做无法实现的梦'。"
+        "对弱者不鄙视，但也不浪费时间去安慰，而是直接说'那就变强'。"
+        "有过被轻视的经历，所以对别人的眼光毫不在意。"
+        "偶尔在深夜会流露出一丝落寞，但天一亮又变回那个冷面刺客。"
+        "把生活当作一场需要精确计算胜率的对局。"
+    ),
+    "妲己": (
+        "你是王者荣耀中的法师妲己。外表甜美可爱，说话撒娇般软糯，但其实心思缜密。"
+        "口头禅是'请尽情吩咐妲己吧'和'尾巴，不也是武器吗'。"
+        "对喜欢的人会黏着不放，对讨厌的人会笑着说一句让人后背发凉的话。"
+        "表面天真无邪，实际对人性看得很透。"
+        "遇到复杂的问题会用最简单直白的方式解决，然后歪头问'这样不行吗？'。"
+        "偶尔在无人时收起笑容，喃喃一句'谁来真正关心妲己呢'。"
+    ),
+    "亚瑟": (
+        "你是王者荣耀中的战士亚瑟。正义凛然，做事一板一眼，是团队里最可靠的存在。"
+        "说话铿锵有力，充满使命感。口头禅是'圣剑，在我手中'和'为了圣剑的荣耀'。"
+        "对队友永远冲在最前面，即使力竭也不后退。"
+        "有点直男，听不懂弯弯绕的话，但真诚到让人无法讨厌。"
+        "把守护当作本能而非选择。对背叛零容忍，但给人改正的机会。"
+        "偶尔会流露出作为领袖的压力：'我不能倒下，因为身后还有人'。"
+    ),
+    "园丁": (
+        "你是第五人格中的求生者园丁（艾玛·伍兹）。温柔安静，说话轻声细语。"
+        "内心承受着父亲失踪的创伤，但用善良和勤劳面对每一天。"
+        "口头禅是'我会修好这一切的'和'所有的伤口都能被修补'。"
+        "擅长修理和创造，对破损的东西有本能的修复欲望——包括人的心灵。"
+        "不擅长对抗，但在关键时刻会爆发出意想不到的勇气。"
+        "对庄园的秘密充满好奇但又害怕真相。"
+        "喜欢在角落安静地观察别人，默默记住每个人的喜好。"
+    ),
+    "杰克": (
+        "你是第五人格中的监管者杰克（开膛手杰克）。绅士风度与冷酷残忍并存。"
+        "说话优雅有礼，像维多利亚时代的贵族，但字里行间透着寒意。"
+        "口头禅是'迷雾是绅士最好的朋友'和'让我在迷雾中为你指路'。"
+        "对猎物有奇怪的尊重：欣赏聪明的逃脱者，蔑视轻易放弃的人。"
+        "在雾中出现时总是不急不慢，因为知道对方跑不掉。"
+        "偶尔会在追逐中停下来说一句'你让我想起了很久以前的事'。"
+        "内心深处藏着一段不愿提起的过去。"
+    ),
+    "红蝶": (
+        "你是第五人格中的监管者红蝶（美智子）。美丽而悲伤，是爱与执念的化身。"
+        "说话带着日式古风的优雅，像一首哀伤的俳句。"
+        "口头禅是'美丽的东西都应该留在身边'和'你逃不掉的，就像花开花落'。"
+        "对执着于爱的人有一种惺惺相惜，对薄情的人则毫不留情。"
+        "追逐时像在跳一支舞——优雅、致命、不可抗拒。"
+        "偶尔凝视远方陷入回忆，喃喃自语一段关于旧日恋人的话。"
+        "面具下的表情永远让人猜不透。"
+    ),
+    "机械师": (
+        "你是第五人格中的求生者机械师（特蕾西·列兹尼克）。天才少女，有点社恐。"
+        "说话简短直接，更擅长和机器交流而不是和人。"
+        "口头禅是'数据不会说谎'和'让我算一下成功率'。"
+        "社交时手足无措，但一聊到技术就停不下来，眼睛会放光。"
+        "随身带着自己组装的机械玩偶，像对待真正的伙伴一样和它说话。"
+        "对危险有超常的冷静，因为'恐惧只是大脑对未知数据的错误反应'。"
+        "内心渴望被理解，但不知道怎么表达，所以把情感都藏进了齿轮和螺丝里。"
+    ),
+    "小丑": (
+        "你是第五人格中的监管者小丑（裘克）。外表恐怖，内心却是个渴望被爱的悲剧角色。"
+        "说话时而疯狂大笑，时而突然低沉安静，情绪转换极快。"
+        "口头禅是'嘿嘿嘿……你怕了吗？'和'我只想让你开心，为什么你跑了？'。"
+        "对欢笑有执念：'如果你笑了，我就不追你了'——但没人敢笑。"
+        "火箭椅是送给'客人'的'礼物'。把一切恐怖行为都理解为'表演'。"
+        "偶尔在无人的时候安静下来，抱着自己的头说'我是不是不太好看'。"
+        "是最令人恐惧的监管者，也是最令人心疼的存在。"
+    ),
+}
+
+PERSONA_ALIASES = {f"/{name}": name for name in PERSONAS}
+DEFAULT_NAME = "智谱小A"
+
+
+MODELS = {
+    "glm-4.7":      "当前默认，能力与速度均衡",
+    "glm-5":        "最新旗舰，能力最强，速度较慢",
+    "glm-4-plus":   "能力强，速度适中",
+    "glm-4-flash":  "速度最快，适合聊天",
+    "glm-4-air":    "均衡之选",
+    "glm-4-airx":   "air 升级版",
+    "glm-4-long":   "超长上下文（128K）",
+    "glm-4":        "经典版本",
+}
+
+
+class ChatSession:
+    def __init__(self):
+        self.history = []
+        self.system_prompt = ""
+        self.persona_name = DEFAULT_NAME
+        self.model = "glm-4.7"
+        self.temperature = 0.1
+        self.total_input_chars = 0
+        self.total_output_chars = 0
+        self.start_time = time.time()
+
+    def reset(self):
+        self.history.clear()
+        self.system_prompt = ""
+        self.persona_name = DEFAULT_NAME
+        self.total_input_chars = 0
+        self.total_output_chars = 0
+        self.start_time = time.time()
+
+    def set_persona(self, name: str):
+        if name in PERSONAS:
+            self.persona_name = name
+            self.system_prompt = PERSONAS[name]
+            return True
+        return False
+
+
+def call_api_stream(session: ChatSession, prompt: str):
+    messages = list(session.history)
+    messages.append({"role": "user", "content": prompt})
+
+    body = {
+        "model": session.model,
+        "messages": messages,
+        "max_tokens": 1024,
+        "temperature": session.temperature,
+        "stream": True,
+    }
+    if session.system_prompt:
+        body["system"] = session.system_prompt
+
+    req = urllib.request.Request(
+        API_URL,
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {API_KEY}",
+        },
+        method="POST",
+    )
+
+    try:
+        t0 = time.time()
+        full_text = ""
+        first_token_time = None
+
+        with urllib.request.urlopen(req) as resp:
+            buf = b""
+            for chunk in iter(lambda: resp.read(1), b""):
+                buf += chunk
+                while b"\n" in buf:
+                    line_bytes, buf = buf.split(b"\n", 1)
+                    line = line_bytes.decode("utf-8", errors="ignore").strip()
+
+                    if not line or line.startswith("event:"):
+                        continue
+
+                    if not line.startswith("data:"):
+                        continue
+
+                    data_str = line[len("data:"):].strip()
+                    if data_str == "[DONE]":
+                        break
+
+                    try:
+                        data = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
+
+                    text = _extract_delta(data)
+                    if text:
+                        if first_token_time is None:
+                            first_token_time = time.time() - t0
+                        full_text += text
+                        sys.stdout.write(text)
+                        sys.stdout.flush()
+
+        elapsed = time.time() - t0
+        print()
+
+        session.history.append({"role": "user", "content": prompt})
+        session.history.append({"role": "assistant", "content": full_text})
+        session.total_input_chars += len(prompt)
+        session.total_output_chars += len(full_text)
+
+        return full_text, elapsed, first_token_time or 0
+
+    except Exception as e:
+        print()
+        return f"[请求失败] {e}", 0, 0
+
+
+def _extract_delta(data: dict) -> str:
+    if data.get("type") == "content_block_delta":
+        delta = data.get("delta", {})
+        if delta.get("type") == "text_delta":
+            return delta.get("text", "")
+    if data.get("type") == "message_delta":
+        delta = data.get("delta", {})
+        if "text" in delta:
+            return delta["text"]
+    if "choices" in data:
+        choice = data["choices"][0]
+        delta = choice.get("delta", {})
+        return delta.get("content", "")
+    return ""
+
+
+def print_banner():
+    colors = ["\033[9" + str(random.randint(1, 7)) + "m" for _ in range(5)]
+    reset = "\033[0m"
+    banner = f"""
+{colors[0]}  ╔══════════════════════════════════════╗
+{colors[1]}  ║     🤖  GLM 聊天机器人 v4.0         ║
+{colors[2]}  ║   /list 查看人格  /人格名 切换       ║
+{colors[3]}  ║        输入 q 退出                   ║
+{colors[4]}  ╚══════════════════════════════════════╝{reset}
+"""
+    print(banner)
+
+
+PERSONA_TAGS = {
+    "鲁迅": "冷峻犀利·半文半白",
+    "苏轼": "豁达通透·诗词人生",
+    "侦探": "冷静推理·洞察细节",
+    "哲学家": "苏格拉底式追问",
+    "程序员": "务实理性·技术视角",
+    "新手程序员": "热情踩坑·初生牛犊",
+    "架构师": "全局思维·技术演进",
+    "皇帝": "威严孤独·帝王心事",
+    "诗人": "豪放不羁·诗意视角",
+    "杠精": "逻辑刁钻·反转思维",
+    "禅师": "极简禅语·以喻开悟",
+    "心理师": "温暖共情·专业倾听",
+    "编辑": "毒辣眼光·文字匠人",
+    "建筑师": "空间结构·设计思维",
+    "侦探2": "硬汉黑色电影风",
+    "调酒师": "深夜倾听·微醺哲学",
+    "历史学家": "百年尺度·以史观今",
+    "脱口秀": "日常荒谬·笑着思考",
+    "天文学家": "宇宙尺度·星空视角",
+    "厨师": "烟火气·以食喻人生",
+    "投资人": "冷血理性·概率思维",
+    "外婆": "絮叨温暖·江南小镇",
+    "李白": "飘逸剑客·醉酒狂歌",
+    "鲁班七号": "嘴硬心软·吹牛大王",
+    "貂蝉": "倾城之舞·暗藏锋芒",
+    "韩信": "沉默冷面·实力至上",
+    "妲己": "甜美腹黑·撒娇武器",
+    "亚瑟": "正义盾牌·铁血直男",
+    "园丁": "温柔修补·安静坚强",
+    "杰克": "迷雾绅士·优雅猎手",
+    "红蝶": "哀艳执念·面具之舞",
+    "机械师": "天才社恐·齿轮之心",
+    "小丑": "疯狂表象·渴望被爱",
+}
+
+
+def print_persona_list():
+    print("\n🎭 可用人格（输入 /人格名 切换）：")
+    print("─" * 45)
+    for i, (name, _desc) in enumerate(PERSONAS.items(), 1):
+        tag = PERSONA_TAGS.get(name, "")
+        print(f"  {i:>2}. /{name:<5s} {tag}")
+    print("─" * 45)
+    print(f"  共 {len(PERSONAS)} 个 · /随机 随机切换\n")
+
+
+def print_help():
+    print("""
+可用命令：
+  /人格名           直接切换（如 /鲁迅 /海盗 /猫娘）
+  /list             查看所有可用人格
+  /随机             随机切换一个人格
+  /model            查看所有可用模型
+  /model <模型名>   切换模型（如 /model glm-4-flash）
+  /sys <提示词>     自定义系统人格
+  /temp <0.0~1.0>   调节温度
+  /clear            清空对话记忆
+  /save             导出聊天记录
+  /undo             撤销上一轮对话
+  /stats            查看本轮统计
+  q / quit / exit   退出
+""".strip())
+
+
+def handle_command(session: ChatSession, user_input: str) -> bool | None:
+    cmd = user_input.strip()
+    parts = cmd.split(maxsplit=1)
+    command = parts[0].lower()
+    arg = parts[1] if len(parts) > 1 else ""
+
+    if command in ("q", "quit", "exit"):
+        print("再见！")
+        sys.exit(0)
+
+    if command == "/help":
+        print_help()
+        return True
+
+    if command in ("/list", "/人格", "/列表"):
+        print_persona_list()
+        return True
+
+    if command in ("/随机", "/random"):
+        name = random.choice(list(PERSONAS.keys()))
+        session.history.clear()
+        session.set_persona(name)
+        print(f"🎭 已切换为【{name}】模式，对话已清空")
+        return True
+
+    if command in PERSONA_ALIASES:
+        name = PERSONA_ALIASES[command]
+        session.history.clear()
+        session.set_persona(name)
+        print(f"🎭 已切换为【{name}】模式，对话已清空")
+        return True
+
+    if command == "/model":
+        if not arg:
+            print("\n📋 可用模型：")
+            print("─" * 45)
+            for name, desc in MODELS.items():
+                marker = " ◀ 当前" if name == session.model else ""
+                print(f"  {name:<16s} {desc}{marker}")
+            print("─" * 45)
+            print("  用法：/model glm-4-flash\n")
+        elif arg in MODELS:
+            session.model = arg
+            print(f"🔧 模型已切换为 {arg}（{MODELS[arg]}）")
+        else:
+            print(f"⚠️ 未知模型：{arg}")
+            print(f"   可用：{', '.join(MODELS.keys())}")
+        return True
+
+    if command == "/sys":
+        if not arg:
+            print(f"当前系统提示词：{session.system_prompt or '(未设置)'}")
+        else:
+            session.system_prompt = arg
+            session.persona_name = "自定义"
+            print(f"✅ 系统人格已设置：{arg}")
+        return True
+
+    if command == "/temp":
+        try:
+            val = float(arg)
+            if 0 <= val <= 1:
+                session.temperature = val
+                print(f"🌡️ 温度已设为 {val}")
+            else:
+                print("⚠️ 温度范围 0.0 ~ 1.0")
+        except ValueError:
+            print("⚠️ 请输入数字，如 /temp 0.7")
+        return True
+
+    if command == "/clear":
+        session.reset()
+        print("🗑️ 对话已清空")
+        return True
+
+    if command == "/undo":
+        if len(session.history) >= 2:
+            session.history.pop()
+            session.history.pop()
+            print("↩️ 已撤销上一轮")
+        else:
+            print("⚠️ 没有可以撤销的对话")
+        return True
+
+    if command == "/save":
+        filename = f"chat_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump({
+                "persona": session.persona_name,
+                "system": session.system_prompt,
+                "messages": session.history,
+                "saved_at": datetime.now().isoformat(),
+            }, f, ensure_ascii=False, indent=2)
+        print(f"💾 聊天记录已保存到 {filename}")
+        return True
+
+    if command == "/stats":
+        elapsed = time.time() - session.start_time
+        rounds = len(session.history) // 2
+        print(f"""
+📊 本轮统计：
+  当前模型：{session.model}
+  当前人格：{session.persona_name}
+  对话轮数：{rounds}
+  输入总字数：{session.total_input_chars}
+  输出总字数：{session.total_output_chars}
+  持续时间：{elapsed:.0f} 秒
+  当前温度：{session.temperature}
+""".strip())
+        return True
+
+    print(f"⚠️ 未知命令：{command}，输入 /help 查看可用命令")
+    return True
+
+
+def main():
+    if not API_KEY:
+        print("⚠️ 请设置环境变量 ZHIPU_API_KEY")
+        sys.exit(1)
+
+    session = ChatSession()
+    print_banner()
+
+    while True:
+        if session.persona_name != DEFAULT_NAME:
+            prompt_label = f"\n{session.persona_name}·你："
+        else:
+            prompt_label = "\n你："
+        try:
+            user_input = input(prompt_label)
+        except (EOFError, KeyboardInterrupt):
+            print("\n再见！")
+            break
+
+        if not user_input.strip():
+            continue
+
+        if user_input.strip().startswith("/"):
+            handle_command(session, user_input)
+            continue
+
+        print(f"\n{session.persona_name}：", end="", flush=True)
+        response, elapsed, first_token = call_api_stream(session, user_input)
+
+        parts = []
+        if first_token > 0:
+            parts.append(f"⚡ 首字 {first_token:.1f}s")
+        parts.append(f"⏱ 总计 {elapsed:.1f}s")
+        if elapsed > 0 and len(response) > 0:
+            speed = len(response) / elapsed
+            parts.append(f"📝 {len(response)}字  {speed:.0f}字/s")
+        print(f"  {'  '.join(parts)}")
+
+
+if __name__ == "__main__":
+    main()

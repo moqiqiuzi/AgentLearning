@@ -5,3 +5,5 @@ build/
 *.egg-info/
 chat_log_*.json
 .env
+*.db
+chat_cache/

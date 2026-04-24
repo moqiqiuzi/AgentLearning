@@ -1,0 +1,2146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🐺 狼人杀 - GlmChat</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #0a0a12; color: #e0e0e0; height: 100vh; display: flex; overflow: hidden; }
+
+#sidebar {
+    width: 260px; background: #12121e; border-right: 1px solid #1e1e30;
+    display: flex; flex-direction: column; flex-shrink: 0;
+}
+#sidebar .header {
+    padding: 14px 16px; font-size: 18px; font-weight: 700; color: #c8c8ff;
+    border-bottom: 1px solid #1e1e30; display: flex; align-items: center; gap: 8px;
+}
+#player-list { flex: 1; overflow-y: auto; padding: 8px; }
+.player-card {
+    padding: 10px 12px; border-radius: 8px; margin-bottom: 6px;
+    background: #1a1a2e; border: 1px solid #2a2a40; position: relative;
+    transition: all 0.3s; display: flex; gap: 10px; align-items: center;
+}
+.player-card .avatar-wrap {
+    width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; border: 2px solid #3a3a5a;
+}
+.player-card .avatar-wrap.male { background: linear-gradient(135deg, #1a2a5a, #2a3a6a); border-color: #4a6aff; }
+.player-card .avatar-wrap.female { background: linear-gradient(135deg, #4a1a3a, #5a2a4a); border-color: #ff6a8a; }
+.player-card .info { flex: 1; min-width: 0; }
+.player-card .name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-card .seat { font-size: 11px; color: #666; }
+.player-card .status { font-size: 11px; margin-top: 2px; }
+.player-card .status.alive { color: #6a6; }
+.player-card .status.dead-status { color: #a66; }
+.player-card .role-badge {
+    position: absolute; right: 10px; top: 10px; font-size: 16px;
+}
+.player-card.speaking {
+    border-color: #4a6aff;
+    box-shadow: 0 0 12px rgba(74, 106, 255, 0.3);
+    animation: pulse-border 2s ease-in-out infinite;
+}
+@keyframes pulse-border {
+    0%, 100% { box-shadow: 0 0 8px rgba(74, 106, 255, 0.2); }
+    50% { box-shadow: 0 0 20px rgba(74, 106, 255, 0.5); }
+}
+.player-card.dead {
+    opacity: 0.4; background: #1a1a1a;
+    animation: death-fade 1s ease-out;
+}
+.player-card.dead .avatar-wrap { filter: grayscale(1); border-color: #333; }
+@keyframes death-fade {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0.4; transform: translateY(-8px); }
+}
+.player-card .vote-count {
+    position: absolute; left: -6px; top: -6px; background: #e53e3e; color: #fff;
+    font-size: 11px; font-weight: 700; min-width: 18px; height: 18px;
+    border-radius: 9px; display: none; align-items: center; justify-content: center;
+    padding: 0 4px; z-index: 5;
+}
+.player-card .vote-target {
+    cursor: pointer; border: 1px dashed #4a6aff; display: none;
+}
+.player-card .vote-target:hover { background: #2a2a5e; }
+#game-controls {
+    padding: 10px; border-top: 1px solid #1e1e30;
+    display: flex; flex-direction: column; gap: 6px;
+}
+.ctrl-btn {
+    width: 100%; padding: 8px; border: none; border-radius: 6px;
+    cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.2s;
+}
+.ctrl-btn.primary { background: #2a3a7a; color: #aac; }
+.ctrl-btn.primary:hover { background: #3a4a9a; }
+.ctrl-btn.danger { background: #5a2a2a; color: #caa; }
+.ctrl-btn.danger:hover { background: #7a3a3a; }
+.ctrl-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.speed-control { display: flex; gap: 4px; }
+.speed-btn {
+    flex: 1; padding: 5px; border: 1px solid #2a2a40; background: #1a1a2e;
+    color: #888; border-radius: 4px; cursor: pointer; font-size: 11px;
+}
+.speed-btn.active { background: #2a3a6a; color: #aac; border-color: #4a6aff; }
+
+#main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+#stage-header {
+    padding: 12px 20px; background: #0e0e1a; border-bottom: 1px solid #1e1e30;
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+}
+#stage-header .title { font-size: 16px; font-weight: 700; color: #aac; }
+#stage-header .round-info { font-size: 13px; color: #666; }
+#stage-header .alive-count { font-size: 13px; color: #6a6; }
+#stage-header .header-actions { display: flex; gap: 8px; align-items: center; }
+.header-action-btn {
+    background: none; border: 1px solid #2a2a40; color: #888;
+    width: 32px; height: 32px; border-radius: 6px; cursor: pointer;
+    font-size: 16px; display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+}
+.header-action-btn:hover { border-color: #4a6aff; color: #aac; }
+#sound-toggle.muted { color: #555; }
+.back-btn {
+    background: none; border: none; color: #555; cursor: pointer;
+    font-size: 18px; padding: 4px 8px; border-radius: 6px;
+    transition: all 0.2s; text-decoration: none;
+}
+.back-btn:hover { color: #aac; background: rgba(74,106,255,0.1); }
+
+#stage {
+    flex: 1; overflow-y: auto; padding: 20px; position: relative;
+    transition: background 1.5s ease;
+}
+#stage.night-bg { background: linear-gradient(180deg, #08081a 0%, #0a0a2e 100%); }
+#stage.day-bg { background: linear-gradient(180deg, #e8f0f8 0%, #f0e8d8 100%); }
+
+.stage-canvas {
+    position: absolute; inset: 0; pointer-events: none; z-index: 0;
+}
+.event-msg { position: relative; z-index: 1; }
+#celestial-moon, #celestial-sun { position: absolute !important; pointer-events: none; z-index: 2; }
+#fog-overlay, #sunshine-overlay { position: absolute; pointer-events: none; }
+
+.event-msg {
+    margin-bottom: 12px; padding: 10px 14px; border-radius: 8px;
+    animation: msg-appear 0.4s ease-out;
+    max-width: 80%;
+}
+@keyframes msg-appear {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.event-msg.system {
+    background: #1a1a2e; border: 1px solid #2a2a40; color: #aac;
+    text-align: center; max-width: 100%; font-size: 13px;
+}
+.event-msg.system.phase {
+    font-size: 16px; font-weight: 700; padding: 14px;
+    background: linear-gradient(135deg, #1a1a3e, #2a1a3e);
+    border: 1px solid #3a3a6a;
+}
+.event-msg.death {
+    background: #2a1a1a; border: 1px solid #4a2a2a; color: #caa;
+    text-align: center; max-width: 100%;
+}
+.event-msg.peace {
+    background: #1a2a1a; border: 1px solid #2a4a2a; color: #aca;
+    text-align: center; max-width: 100%;
+}
+.event-msg.speech {
+    background: #1e1e30; border: 1px solid #2e2e44;
+    display: flex; gap: 10px; align-items: flex-start;
+}
+.event-msg.speech .speech-avatar {
+    width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; margin-top: 2px;
+}
+.event-msg.speech .speech-avatar.male { background: linear-gradient(135deg, #1a2a5a, #2a3a6a); border: 2px solid #4a6aff; }
+.event-msg.speech .speech-avatar.female { background: linear-gradient(135deg, #4a1a3a, #5a2a4a); border: 2px solid #ff6a8a; }
+.event-msg.speech .speech-body { flex: 1; min-width: 0; }
+.event-msg.speech .speaker {
+    font-size: 12px; color: #6a8aff; font-weight: 600; margin-bottom: 4px;
+}
+.event-msg.speech .content { font-size: 14px; line-height: 1.6; }
+.event-msg.speech .typing-cursor {
+    display: inline-block; width: 2px; height: 14px; background: #6a8aff;
+    vertical-align: text-bottom; margin-left: 2px;
+    animation: blink-cursor 0.6s step-end infinite;
+}
+@keyframes blink-cursor {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+.event-msg.vote {
+    background: #1e1a2e; border: 1px solid #2e2a44;
+    display: flex; align-items: center; gap: 8px;
+}
+.event-msg.vote .voter { color: #aa8aff; font-weight: 600; }
+.event-msg.vote .vote-arrow-icon {
+    color: #faa; font-size: 16px; animation: arrow-slide 0.5s ease-out;
+}
+@keyframes arrow-slide {
+    from { transform: translateX(-10px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+.event-msg.action {
+    background: #161628; border: 1px solid #222240; color: #888;
+    font-size: 12px;
+}
+.event-msg.action .role-anim {
+    display: inline-block; font-size: 20px;
+    animation: role-pulse 1.5s ease-in-out infinite;
+}
+@keyframes role-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+}
+.event-msg.game-over {
+    background: linear-gradient(135deg, #2a1a3e, #1a2a3e);
+    border: 2px solid #5a4aff; text-align: center; padding: 20px;
+    max-width: 100%; font-size: 18px; font-weight: 700;
+}
+.event-msg .typing-dots::after {
+    content: ''; animation: dots 1.5s steps(3) infinite;
+}
+@keyframes dots {
+    0% { content: '.'; }
+    33% { content: '..'; }
+    66% { content: '...'; }
+}
+
+#action-panel {
+    display: none; padding: 12px; border-top: 1px solid #1e1e30;
+    background: #12121e;
+}
+#action-panel .prompt-text { font-size: 13px; color: #aac; margin-bottom: 10px; }
+#action-panel .action-targets {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px;
+}
+.target-btn {
+    padding: 6px 14px; border: 1px solid #3a3a5a; background: #1a1a3e;
+    color: #aac; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+.target-btn:hover { background: #2a2a5e; border-color: #5a6aff; }
+.target-btn.selected { background: #3a4a9a; border-color: #6a8aff; }
+#action-confirm {
+    padding: 8px 24px; background: #3a5a3a; color: #afa;
+    border: none; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+#action-confirm:hover { background: #4a6a4a; }
+
+#setup-overlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.9);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+#setup-panel {
+    background: #14142a; border: 1px solid #2a2a50; border-radius: 12px;
+    padding: 30px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;
+}
+#setup-panel h2 { color: #aac; margin-bottom: 20px; text-align: center; font-size: 20px; }
+.setup-section { margin-bottom: 18px; }
+.setup-section label { display: block; font-size: 13px; color: #888; margin-bottom: 6px; }
+.theme-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px;
+}
+.theme-btn {
+    padding: 10px; border: 1px solid #2a2a40; background: #1a1a2e; color: #aac;
+    border-radius: 8px; cursor: pointer; text-align: center; font-size: 13px;
+}
+.theme-btn:hover { border-color: #4a6aff; }
+.theme-btn.selected { background: #2a3a6a; border-color: #5a8aff; }
+.theme-btn .count { font-size: 11px; color: #666; }
+.count-selector { display: flex; gap: 6px; }
+.count-btn {
+    width: 40px; height: 36px; border: 1px solid #2a2a40; background: #1a1a2e;
+    color: #aac; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600;
+}
+.count-btn:hover { border-color: #4a6aff; }
+.count-btn.selected { background: #2a3a6a; border-color: #5a8aff; }
+.mode-selector { display: flex; gap: 8px; }
+.mode-btn {
+    flex: 1; padding: 10px; border: 1px solid #2a2a40; background: #1a1a2e;
+    color: #aac; border-radius: 8px; cursor: pointer; text-align: center; font-size: 13px;
+}
+.mode-btn:hover { border-color: #4a6aff; }
+.mode-btn.selected { background: #2a3a6a; border-color: #5a8aff; }
+.mode-btn .desc { font-size: 11px; color: #666; margin-top: 4px; }
+#start-btn {
+    width: 100%; padding: 12px; background: #2a4a8a; color: #fff;
+    border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 700;
+    margin-top: 10px;
+}
+#start-btn:hover { background: #3a5a9a; }
+#start-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+#card-flip-overlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.95);
+    display: none; align-items: center; justify-content: center; z-index: 200;
+    flex-direction: column; gap: 20px;
+}
+.card-container { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; max-width: 700px; }
+.flip-card {
+    width: 80px; height: 110px; perspective: 600px; cursor: pointer;
+}
+.flip-card-inner {
+    width: 100%; height: 100%; position: relative;
+    transform-style: preserve-3d; transition: transform 0.6s;
+}
+.flip-card.flipped .flip-card-inner { transform: rotateY(180deg); }
+.flip-card-front, .flip-card-back {
+    position: absolute; inset: 0; backface-visibility: hidden;
+    border-radius: 8px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+}
+.flip-card-front { background: #2a2a5a; border: 2px solid #4a4a8a; }
+.flip-card-front .q-mark { font-size: 28px; color: #6a6aaa; }
+.flip-card-back {
+    background: #1a1a3e; border: 2px solid #5a6aff;
+    transform: rotateY(180deg); padding: 6px;
+}
+.flip-card-back .card-name { font-size: 11px; font-weight: 600; color: #aac; text-align: center; margin-bottom: 4px; }
+.flip-card-back .card-role { font-size: 20px; }
+.flip-card-back .card-role-name { font-size: 10px; color: #888; }
+
+#game-end-overlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.9);
+    display: none; align-items: center; justify-content: center; z-index: 300;
+    flex-direction: column; gap: 16px;
+}
+#game-end-overlay .result { font-size: 28px; font-weight: 700; }
+#game-end-overlay .result.village { color: #6afa6a; }
+#game-end-overlay .result.werewolf { color: #fa6a6a; }
+.save-btn {
+    padding: 10px 30px; background: #2a4a8a; color: #fff;
+    border: none; border-radius: 8px; cursor: pointer; font-size: 14px;
+}
+.save-btn:hover { background: #3a5a9a; }
+
+
+
+.loading-bar {
+    height: 3px; background: #2a2a40; border-radius: 2px; overflow: hidden; margin: 8px 0;
+}
+.loading-bar .fill {
+    height: 100%; background: #4a6aff; width: 0%;
+    animation: loading 2s ease-in-out infinite;
+}
+@keyframes loading {
+    0% { width: 0%; }
+    50% { width: 70%; }
+    100% { width: 100%; }
+}
+
+/* === CELESTIAL BODIES === */
+#celestial-moon, #celestial-sun {
+    position: absolute; pointer-events: none; z-index: 2;
+    transition: opacity 2s ease, transform 2s ease;
+}
+#celestial-moon {
+    right: 40px; top: 20px; width: 70px; height: 70px;
+    background: radial-gradient(circle at 35% 35%, #f5f5d0, #e0d8a0);
+    border-radius: 50%; box-shadow: 0 0 30px rgba(255,255,200,0.4), 0 0 60px rgba(255,255,200,0.2);
+}
+#celestial-moon::before {
+    content: ''; position: absolute; top: 15px; left: 20px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: rgba(0,0,0,0.08);
+}
+#celestial-moon::after {
+    content: ''; position: absolute; top: 35px; left: 35px;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: rgba(0,0,0,0.06);
+}
+#celestial-sun {
+    left: 40px; top: 10px; width: 60px; height: 60px;
+    background: radial-gradient(circle at 40% 40%, #fff8a0, #ffcc33);
+    border-radius: 50%; box-shadow: 0 0 40px rgba(255,200,50,0.5), 0 0 80px rgba(255,180,30,0.2);
+    opacity: 0; transform: translateY(20px);
+}
+#celestial-sun.visible { opacity: 1; transform: translateY(0); }
+#celestial-moon.hidden { opacity: 0; transform: translateY(-20px); }
+
+/* === WEATHER === */
+#fog-overlay {
+    position: absolute; inset: 0; pointer-events: none; z-index: 3;
+    background: linear-gradient(180deg, rgba(100,100,140,0.08) 0%, rgba(80,80,120,0.15) 100%);
+    transition: opacity 1.5s;
+    opacity: 1;
+}
+#sunshine-overlay {
+    position: absolute; inset: 0; pointer-events: none; z-index: 3;
+    background: radial-gradient(ellipse at 15% 10%, rgba(255,220,100,0.12) 0%, transparent 60%);
+    transition: opacity 1.5s;
+    opacity: 0;
+}
+#sunshine-overlay.visible { opacity: 1; }
+#fog-overlay.hidden { opacity: 0; }
+
+/* === DEATH FLASH === */
+#death-flash {
+    position: fixed; inset: 0; pointer-events: none; z-index: 999;
+    background: white; opacity: 0;
+}
+#death-flash.active {
+    animation: death-flash-anim 0.5s ease-out forwards;
+}
+@keyframes death-flash-anim {
+    0% { opacity: 0.7; }
+    100% { opacity: 0; }
+}
+
+/* === GHOST === */
+.ghost {
+    position: absolute; font-size: 28px; pointer-events: none; z-index: 10;
+    animation: ghost-rise 2.5s ease-out forwards;
+    filter: blur(1px);
+}
+@keyframes ghost-rise {
+    0% { opacity: 0.9; transform: translateY(0) scale(1); }
+    60% { opacity: 0.6; }
+    100% { opacity: 0; transform: translateY(-120px) scale(0.5); }
+}
+
+/* === SCREEN SHAKE === */
+.shake { animation: shake-anim 0.5s ease-in-out; }
+@keyframes shake-anim {
+    0%, 100% { transform: translateX(0); }
+    10% { transform: translateX(-6px) rotate(-0.5deg); }
+    20% { transform: translateX(5px) rotate(0.5deg); }
+    30% { transform: translateX(-4px); }
+    40% { transform: translateX(4px); }
+    50% { transform: translateX(-2px); }
+    60% { transform: translateX(2px); }
+    70% { transform: translateX(-1px); }
+}
+
+/* === FIREWORKS CANVAS === */
+#fireworks-canvas {
+    position: fixed; inset: 0; pointer-events: none; z-index: 500;
+}
+
+/* === ROLE SVG ANIMATIONS === */
+.role-svg-anim {
+    display: inline-block; position: relative;
+}
+.role-svg-anim svg { width: 48px; height: 48px; }
+.role-svg-anim.wolf-glow svg { filter: drop-shadow(0 0 6px rgba(255,60,60,0.6)); }
+.role-svg-anim.seer-glow svg { filter: drop-shadow(0 0 6px rgba(140,80,255,0.6)); }
+.role-svg-anim.witch-glow svg { filter: drop-shadow(0 0 6px rgba(60,220,60,0.6)); }
+.role-svg-anim.hunter-glow svg { filter: drop-shadow(0 0 6px rgba(255,180,40,0.6)); }
+.role-svg-anim.guard-glow svg { filter: drop-shadow(0 0 6px rgba(60,140,255,0.6)); }
+
+/* === SPEECH MODE TAG === */
+.speech-mode-tag {
+    font-size: 10px; padding: 1px 6px; border-radius: 3px;
+    background: #2a2a4a; color: #888; margin-left: 4px; vertical-align: middle;
+}
+
+#user-speech-panel {
+    display: none; padding: 10px 14px; border-top: 1px solid #1e1e30;
+    background: #12121e;
+}
+#user-speech-panel .speech-hint { font-size: 12px; color: #888; margin-bottom: 8px; }
+#user-speech-panel .speech-input {
+    width: 100%; padding: 8px 12px; border: 1px solid #2a2a40; background: #1a1a2e;
+    color: #e0e0e0; border-radius: 6px; font-size: 14px; resize: none; height: 60px;
+    font-family: inherit;
+}
+#user-speech-panel .speech-input:focus { outline: none; border-color: #5a6aff; }
+#user-speech-panel .speech-btns { display: flex; gap: 8px; margin-top: 8px; }
+#user-speech-panel .speech-btns button {
+    padding: 6px 16px; border: none; border-radius: 6px; cursor: pointer;
+    font-size: 13px; font-weight: 600;
+}
+#user-speech-panel .btn-ai { background: #2a3a7a; color: #aac; }
+#user-speech-panel .btn-ai:hover { background: #3a4a9a; }
+#user-speech-panel .btn-send { background: #2a5a3a; color: #afa; }
+#user-speech-panel .btn-send:hover { background: #3a6a4a; }
+
+#ranking-overlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.9);
+    display: none; align-items: center; justify-content: center; z-index: 350;
+}
+#ranking-panel {
+    background: #14142a; border: 1px solid #2a2a50; border-radius: 12px;
+    padding: 24px; max-width: 550px; width: 90%; max-height: 80vh; overflow-y: auto;
+}
+#ranking-panel h3 { color: #aac; margin-bottom: 16px; font-size: 16px; }
+.rank-section { margin-bottom: 16px; }
+.rank-section h4 { color: #888; font-size: 13px; margin-bottom: 8px; }
+.rank-table { width: 100%; border-collapse: collapse; }
+.rank-table th { text-align: left; color: #666; font-size: 12px; padding: 4px 8px; border-bottom: 1px solid #2a2a40; }
+.rank-table td { padding: 5px 8px; font-size: 13px; border-bottom: 1px solid #1a1a2a; }
+.rank-table .pts { color: #ffa; font-weight: 600; }
+.rank-table .mvp { color: #ff6; }
+.rank-table .rank-num { color: #666; width: 30px; }
+.rank-close { display: block; margin: 16px auto 0; padding: 8px 24px; background: #2a3a5a; color: #aac; border: none; border-radius: 6px; cursor: pointer; }
+
+#vote-confirm-bar {
+    display: none; padding: 8px 14px; border-top: 1px solid #1e1e30;
+    background: #12121e; gap: 8px; align-items: center;
+}
+#vote-confirm-bar .vote-info { flex: 1; font-size: 13px; color: #aac; }
+#vote-confirm-bar button {
+    padding: 6px 18px; border: none; border-radius: 6px; cursor: pointer;
+    font-size: 13px; font-weight: 600;
+}
+#vote-confirm-bar .btn-vote-ok { background: #2a5a3a; color: #afa; }
+#vote-confirm-bar .btn-vote-ok:hover { background: #3a6a4a; }
+#vote-confirm-bar .btn-vote-ok:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.player-card.selectable { cursor: pointer; border-color: #4a6aff; }
+.player-card.selectable:hover { background: #2a2a4e; }
+.player-card.selected-target { border-color: #ffa500; box-shadow: 0 0 10px rgba(255,165,0,0.4); }
+
+.player-card .seer-mark {
+    position: absolute; left: -4px; bottom: -4px; width: 14px; height: 14px;
+    border-radius: 50%; font-size: 10px; display: none;
+    align-items: center; justify-content: center; z-index: 5;
+    border: 1px solid #333;
+}
+.player-card .seer-mark.wolf-mark { display: flex; background: #c53030; color: #fff; }
+.player-card .seer-mark.good-mark { display: flex; background: #38a169; color: #fff; }
+
+.seer-check-result {
+    background: #1a1a3e; border: 1px solid #3a3a6a; border-radius: 6px;
+    padding: 8px 12px; margin-bottom: 8px; font-size: 13px; max-width: 100%;
+    text-align: center;
+}
+.seer-check-result.wolf { color: #fc8181; border-color: #c53030; }
+.seer-check-result.good { color: #68d391; border-color: #38a169; }
+
+#rules-overlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.9);
+    display: none; align-items: center; justify-content: center; z-index: 360;
+}
+#replay-overlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.9);
+    display: none; align-items: center; justify-content: center; z-index: 355;
+}
+#replay-panel {
+    background: #14142a; border: 1px solid #2a2a50; border-radius: 12px;
+    padding: 24px; max-width: 550px; width: 90%; max-height: 80vh; overflow-y: auto;
+}
+#replay-panel h3 { color: #aac; margin-bottom: 16px; font-size: 16px; }
+.replay-item {
+    padding: 10px 12px; margin-bottom: 8px; background: #1a1a2e; border: 1px solid #2a2a40;
+    border-radius: 8px; cursor: pointer; transition: all 0.2s;
+}
+.replay-item:hover { border-color: #4a6aff; background: #2a2a4e; }
+.replay-item .replay-meta { font-size: 12px; color: #888; }
+.replay-item .replay-result { font-size: 14px; color: #aac; font-weight: 600; }
+.replay-item .replay-result.village { color: #6afa6a; }
+.replay-item .replay-result.werewolf { color: #fa6a6a; }
+#rules-panel {
+    background: #14142a; border: 1px solid #2a2a50; border-radius: 12px;
+    padding: 24px; max-width: 600px; width: 90%; max-height: 85vh; overflow-y: auto;
+    color: #ccc; font-size: 13px; line-height: 1.8;
+}
+#rules-panel h3 { color: #aac; margin-bottom: 12px; font-size: 16px; }
+#rules-panel h4 { color: #8af; margin: 12px 0 6px; font-size: 14px; }
+#rules-panel .role-item { margin: 4px 0; }
+#rules-panel .rules-close { display: block; margin: 16px auto 0; padding: 8px 24px; background: #2a3a5a; color: #aac; border: none; border-radius: 6px; cursor: pointer; }
+
+/* === COUNTDOWN === */
+.countdown-badge {
+    display: inline-block; font-size: 12px; padding: 2px 8px;
+    border-radius: 10px; background: #2a2a4a; color: #faa;
+    font-weight: 600; margin-left: 6px;
+}
+.countdown-badge.urgent { color: #f55; animation: countdown-blink 0.5s ease-in-out infinite; }
+@keyframes countdown-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* === DAY THEME OVERRIDES === */
+#stage.day-bg .event-msg.system { background: rgba(255,255,255,0.85); color: #555; border-color: #ddd; }
+#stage.day-bg .event-msg.system.phase { background: linear-gradient(135deg, #f0e8ff, #ffe8f0); color: #555; border-color: #c0b0d0; }
+#stage.day-bg .event-msg.speech { background: rgba(255,255,255,0.9); border-color: #ddd; }
+#stage.day-bg .event-msg.speech .speaker { color: #4a6aff; }
+#stage.day-bg .event-msg.speech .content { color: #333; }
+#stage.day-bg .event-msg.death { background: rgba(255,220,220,0.9); color: #a44; border-color: #daa; }
+#stage.day-bg .event-msg.peace { background: rgba(220,255,220,0.9); color: #4a4; border-color: #ada; }
+#stage.day-bg .event-msg.vote { background: rgba(255,255,255,0.85); border-color: #ddd; }
+#stage.day-bg .event-msg.vote .voter { color: #60a; }
+#stage.day-bg .event-msg.action { background: rgba(255,255,255,0.7); color: #777; border-color: #ddd; }
+#stage.day-bg .event-msg.game-over { background: linear-gradient(135deg, rgba(255,240,255,0.95), rgba(240,240,255,0.95)); color: #333; border-color: #a0a0d0; }
+#stage.day-bg .seer-check-result { background: rgba(255,255,255,0.9); }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+    <div class="header">🐺 狼人杀</div>
+    <div id="player-list"></div>
+    <div id="game-controls">
+        <div class="speed-control">
+            <button class="speed-btn" data-speed="slow">慢</button>
+            <button class="speed-btn active" data-speed="medium">中</button>
+            <button class="speed-btn" data-speed="fast">快</button>
+            <button class="speed-btn" data-speed="instant">极速</button>
+        </div>
+        <button class="ctrl-btn primary" id="btn-step" disabled>▶ 推进一轮</button>
+        <button class="ctrl-btn" id="btn-restart" style="background:#2a3a5a;color:#aac;">🔄 重新开局</button>
+        <button class="ctrl-btn" id="btn-back-chat" style="background:#2a3a5a;color:#aac;">← 返回多人格</button>
+        <button class="ctrl-btn danger" id="btn-stop">🛑 结束游戏</button>
+        <div style="display:flex;gap:6px;">
+            <button class="ctrl-btn" id="btn-rules" style="flex:1;background:#2a3a5a;color:#aac;">📖 规则</button>
+            <button class="ctrl-btn" id="btn-ranking" style="flex:1;background:#2a3a5a;color:#aac;">🏆 积分</button>
+            <button class="ctrl-btn" id="btn-replays" style="flex:1;background:#2a3a5a;color:#aac;">📼 回放</button>
+        </div>
+    </div>
+</div>
+
+<div id="main">
+    <a class="back-btn" href="/" title="返回聊天">💬</a>
+    <div id="stage-header">
+        <span class="title" id="game-title">🐺 狼人杀</span>
+        <span class="round-info" id="round-info">等待开局</span>
+        <span class="alive-count" id="alive-count"></span>
+        <div class="header-actions">
+            <button class="header-action-btn" id="sound-toggle" title="音效开关">🔊</button>
+        </div>
+    </div>
+    <div id="stage" class="night-bg">
+        <canvas id="stars-canvas" class="stage-canvas"></canvas>
+        <canvas id="fx-canvas" class="stage-canvas" style="z-index:2"></canvas>
+        <div id="celestial-moon"></div>
+        <div id="celestial-sun"></div>
+        <div id="fog-overlay"></div>
+        <div id="sunshine-overlay"></div>
+    </div>
+    <div id="action-panel">
+        <div class="prompt-text" id="action-prompt"></div>
+        <div class="action-targets" id="action-targets"></div>
+    </div>
+    <div id="vote-confirm-bar">
+        <span class="vote-info" id="vote-info-text">请点击侧边栏玩家选择目标 <span class="countdown-badge" id="vote-countdown"></span></span>
+        <button class="btn-vote-ok" id="btn-vote-ok" disabled>确认选择</button>
+    </div>
+
+    <div id="user-speech-panel">
+        <div class="speech-hint" id="speech-hint-text">轮到你发言了 <span class="countdown-badge" id="speech-countdown"></span></div>
+        <textarea class="speech-input" id="user-speech-input" placeholder="输入你想说的话..."></textarea>
+        <div class="speech-btns">
+            <button class="btn-ai" id="btn-ai-speech">🤖 AI帮我发言</button>
+            <button class="btn-ai" id="btn-ai-regenerate" style="display:none;background:#3a2a5a;color:#cac;">🔄 重新生成</button>
+            <button class="btn-send" id="btn-send-speech">📤 发送</button>
+        </div>
+    </div>
+
+    <div id="setup-overlay">
+        <div id="setup-panel">
+            <h2>🐺 狼人杀</h2>
+            <div class="setup-section">
+                <label>选择主题</label>
+                <div class="theme-grid" id="theme-grid"></div>
+            </div>
+            <div class="setup-section">
+                <label>人数</label>
+                <div class="count-selector" id="count-selector"></div>
+            </div>
+            <div class="setup-section">
+                <label>你的身份</label>
+                <div class="mode-selector" id="identity-selector">
+                    <button class="mode-btn selected" data-mode="god">
+                        👁️ 上帝<div class="desc">观察全貌</div>
+                    </button>
+                    <button class="mode-btn" data-mode="player">
+                        🎮 玩家<div class="desc">参与游戏</div>
+                    </button>
+                    <button class="mode-btn" data-mode="observer">
+                        👀 旁观者<div class="desc">只看公开</div>
+                    </button>
+                </div>
+            </div>
+            <div class="setup-section">
+                <label>发言模式</label>
+                <div class="mode-selector" id="speech-mode-selector">
+                    <button class="mode-btn" data-speech="verbose">
+                        💬 唠叨<div class="desc">长篇大论</div>
+                    </button>
+                    <button class="mode-btn selected" data-speech="free">
+                        🤖 AI自由<div class="desc">默认长度</div>
+                    </button>
+                    <button class="mode-btn" data-speech="concise">
+                        ⚡ 简洁<div class="desc">言简意赅</div>
+                    </button>
+                </div>
+            </div>
+            <button id="start-btn">开始游戏</button>
+        </div>
+    </div>
+
+    <div id="card-flip-overlay">
+        <div style="color:#aac;font-size:16px;">角色分配中...</div>
+        <div class="card-container" id="card-container"></div>
+    </div>
+
+    <div id="game-end-overlay">
+        <div class="result" id="end-result"></div>
+        <div id="end-details" style="color:#888;font-size:14px;text-align:center;max-width:400px;"></div>
+        <button class="save-btn" id="btn-save-replay">💾 保存回放</button>
+        <button class="save-btn" id="btn-new-game" style="background:#2a6a3a;">🔄 再来一局</button>
+    </div>
+
+    <div id="ranking-overlay">
+        <div id="ranking-panel">
+            <h3>🏆 积分排行</h3>
+            <div id="ranking-content"></div>
+            <button class="rank-close" id="btn-close-ranking">关闭</button>
+            <button class="rank-close" id="btn-reset-stats" style="background:#5a2a2a;color:#caa;">重置我的积分</button>
+        </div>
+    </div>
+
+    <div id="rules-overlay">
+        <div id="rules-panel">
+            <h3>📖 狼人杀游戏规则</h3>
+            <h4>📋 基本规则</h4>
+            <p>游戏分为<b>好人阵营</b>和<b>狼人阵营</b>。夜晚狼人杀人，白天所有人讨论并投票放逐一人。</p>
+            <h4>🏆 胜利条件</h4>
+            <p>• <b>好人胜</b>：所有狼人被淘汰<br>• <b>狼人胜</b>：存活狼人 ≥ 存活好人</p>
+            <h4>🎭 角色说明</h4>
+            <div class="role-item">🐺 <b>狼人</b>：每晚与队友商议杀一人</div>
+            <div class="role-item">🔮 <b>预言家</b>：每晚查验一人的身份（好人/狼人）</div>
+            <div class="role-item">🧪 <b>女巫</b>：有一瓶解药（救人）和一瓶毒药（毒人），各用一次</div>
+            <div class="role-item">🏹 <b>猎人</b>：被杀或被投票出局时可带走一人</div>
+            <div class="role-item">🛡️ <b>守卫</b>：每晚守护一人，不能连续两晚守护同一人</div>
+            <div class="role-item">👤 <b>村民</b>：无特殊能力，靠推理投票</div>
+            <h4>🔄 游戏流程</h4>
+            <p>1. 夜晚：守卫守护 → 狼人杀人 → 预言家查验 → 女巫用药<br>2. 天亮：公布死亡 → 遗言 → 发言讨论 → 投票放逐<br>3. 循环直到一方获胜</p>
+            <h4>🎮 操作说明（玩家模式）</h4>
+            <p>• 夜晚：点击<b>侧边栏玩家卡片</b>选择目标，然后点<b>确认</b><br>• 白天发言：底部输入框打字或点「AI帮我发言」<br>• 投票：点击侧边栏目标玩家，点「确认选择」</p>
+            <h4>📊 积分规则</h4>
+            <p>• 胜利基础分：狼人+150 / 预言家+120 / 女巫+110 / 猎人+110 / 守卫+110 / 村民+80<br>• 失败：-30分<br>• 死亡扣分：被投票-40 / 被毒-20 / 被狼刀-10 / 被猎人带-20<br>• 加分项：猎人带走狼+30 / 预言家正确查验+20/次<br>• MVP：+50分</p>
+            <button class="rules-close" id="btn-close-rules">知道了</button>
+        </div>
+    </div>
+
+    <div id="replay-overlay">
+        <div id="replay-panel">
+            <h3>📼 回放中心</h3>
+            <div id="replay-content"></div>
+            <button class="rank-close" id="btn-close-replay">关闭</button>
+        </div>
+    </div>
+</div>
+
+<div id="death-flash"></div>
+<canvas id="fireworks-canvas"></canvas>
+
+<script>
+const ROLE_ICONS = {werewolf:'🐺',seer:'🔮',witch:'🧪',hunter:'🏹',guard:'🛡️',villager:'👤'};
+const ROLE_NAMES = {werewolf:'狼人',seer:'预言家',witch:'女巫',hunter:'猎人',guard:'守卫',villager:'村民'};
+const ROLE_SVG = {
+    werewolf: `<svg viewBox="0 0 48 48"><circle cx="24" cy="28" r="14" fill="#c53030" opacity="0.8"/><path d="M10 28 Q14 10 24 12 Q34 10 38 28" fill="#c53030"/><circle cx="18" cy="26" r="2.5" fill="#fff"/><circle cx="30" cy="26" r="2.5" fill="#fff"/><circle cx="18.8" cy="25.5" r="1" fill="#1a1a1a"/><circle cx="30.8" cy="25.5" r="1" fill="#1a1a1a"/><path d="M20 32 Q24 36 28 32" stroke="#fff" stroke-width="1.5" fill="none"/></svg>`,
+    seer: `<svg viewBox="0 0 48 48"><circle cx="24" cy="28" r="12" fill="#7c3aed" opacity="0.7"/><circle cx="24" cy="28" r="8" fill="none" stroke="#c4b5fd" stroke-width="1.5"/><circle cx="24" cy="28" r="3" fill="#e0d5ff" opacity="0.8"/><path d="M24 16 L24 10" stroke="#c4b5fd" stroke-width="1.5"/><path d="M18 18 L14 14" stroke="#c4b5fd" stroke-width="1"/><path d="M30 18 L34 14" stroke="#c4b5fd" stroke-width="1"/></svg>`,
+    witch: `<svg viewBox="0 0 48 48"><path d="M16 36 L16 20 Q16 14 24 14 Q32 14 32 20 L32 36 Z" fill="#276749" opacity="0.8"/><rect x="18" y="30" width="12" height="8" rx="2" fill="#2f855a"/><circle cx="22" cy="24" r="2" fill="#9ae6b4" opacity="0.6"/><circle cx="27" cy="22" r="1.5" fill="#9ae6b4" opacity="0.4"/><path d="M20 14 Q18 8 22 6" stroke="#68d391" stroke-width="1.5" fill="none"/></svg>`,
+    hunter: `<svg viewBox="0 0 48 48"><path d="M14 36 L14 18 L24 14 L24 36" fill="#c05621" opacity="0.8"/><line x1="24" y1="25" x2="40" y2="18" stroke="#744210" stroke-width="2.5"/><polygon points="40,18 36,15 38,20" fill="#744210"/><circle cx="20" cy="22" r="2" fill="#fbd38d" opacity="0.6"/></svg>`,
+    guard: `<svg viewBox="0 0 48 48"><path d="M24 8 L36 16 L36 28 Q36 38 24 44 Q12 38 12 28 L12 16 Z" fill="#2b6cb0" opacity="0.8"/><path d="M24 16 L30 20 L30 28 Q30 34 24 38 Q18 34 18 28 L18 20 Z" fill="#bee3f8" opacity="0.3"/><path d="M24 22 L24 32" stroke="#bee3f8" stroke-width="2.5"/></svg>`,
+};
+
+let gameId = null, userMode = 'god', selectedTheme = null, selectedCount = 9;
+let players = [], stepping = false, speechMode = 'free';
+let gameConfig = null;
+let autoStepTimer = null;
+let currentSpeed = 'medium';
+let _scrollTimer = null;
+let _currentSpeakingCard = null;
+let _starsCanvas = null;
+let _starsCtx = null;
+let _animActive = false;
+
+const stage = document.getElementById('stage');
+const playerList = document.getElementById('player-list');
+const roundInfo = document.getElementById('round-info');
+const aliveCount = document.getElementById('alive-count');
+const actionPanel = document.getElementById('action-panel');
+const fxCanvas = document.getElementById('fx-canvas');
+const fxCtx = fxCanvas.getContext('2d');
+const fwCanvas = document.getElementById('fireworks-canvas');
+const fwCtx = fwCanvas.getContext('2d');
+
+/* ========== ANIMATION ENGINE ========== */
+const anim = {
+    stars: [],
+    particles: [],
+    running: false,
+    phase: 'night',
+};
+
+function initAnimLoop() {
+    resizeCanvases();
+    window.addEventListener('resize', resizeCanvases);
+    _starsCanvas = document.getElementById('stars-canvas');
+    if (_starsCanvas) _starsCtx = _starsCanvas.getContext('2d');
+    _animActive = true;
+    animLoop();
+}
+
+function animLoop() {
+    if (!_animActive) return;
+    if (anim.stars.length > 0 || anim.particles.length > 0) {
+        drawStars();
+        drawFx();
+    }
+    requestAnimationFrame(animLoop);
+}
+}
+
+function resizeCanvases() {
+    const c = document.getElementById('stars-canvas');
+    c.width = stage.offsetWidth; c.height = stage.offsetHeight;
+    fxCanvas.width = stage.offsetWidth; fxCanvas.height = stage.offsetHeight;
+    fwCanvas.width = window.innerWidth; fwCanvas.height = window.innerHeight;
+}
+
+function animLoop() {
+    if (!anim.running) return;
+    drawStars();
+    drawFx();
+    requestAnimationFrame(animLoop);
+}
+
+/* ========== STARS ========== */
+function initStars() {
+    const c = document.getElementById('stars-canvas');
+    c.width = stage.offsetWidth; c.height = stage.offsetHeight;
+    anim.stars = [];
+    for (let i = 0; i < 80; i++) {
+        anim.stars.push({
+            x: Math.random() * c.width,
+            y: Math.random() * c.height,
+            r: Math.random() * 1.5 + 0.3,
+            a: Math.random(),
+            da: (Math.random() - 0.5) * 0.02,
+        });
+    }
+}
+
+function drawStars() {
+    if (gameConfig.enable_stars_bg === false) return;
+    const c = _starsCanvas;
+    if (!c) return;
+    const ctx = _starsCtx || c.getContext('2d');
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, c.width, c.height);
+    if (!stage.classList.contains('night-bg')) return;
+    for (const s of anim.stars) {
+        s.a += s.da;
+        if (s.a > 1 || s.a < 0.1) s.da = -s.da;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(200,200,255,${s.a})`;
+        ctx.fill();
+    }
+}
+
+/* ========== FX CANVAS (particles, death, shooting stars) ========== */
+function drawFx() {
+    fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+    anim.particles = anim.particles.filter(p => {
+        p.x += p.vx || 0;
+        p.y += p.vy || 0;
+        p.life -= p.decay || 0.01;
+        if (p.life <= 0) return false;
+        fxCtx.globalAlpha = p.life;
+        if (p.type === 'spark') {
+            fxCtx.fillStyle = p.color || '#ff4444';
+            fxCtx.beginPath();
+            fxCtx.arc(p.x, p.y, p.r || 2, 0, Math.PI * 2);
+            fxCtx.fill();
+        } else if (p.type === 'ghost') {
+            fxCtx.font = `${p.size || 28}px serif`;
+            fxCtx.fillText('👻', p.x, p.y);
+        } else if (p.type === 'ring') {
+            p.radius = (p.radius || 0) + 2;
+            fxCtx.strokeStyle = p.color || 'rgba(74,106,255,0.6)';
+            fxCtx.lineWidth = 2;
+            fxCtx.beginPath();
+            fxCtx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            fxCtx.stroke();
+        }
+        fxCtx.globalAlpha = 1;
+        return true;
+    });
+}
+
+function spawnDeathParticles(name) {
+    const card = document.getElementById('pcard-' + name);
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    const stageRect = stage.getBoundingClientRect();
+    const cx = rect.left - stageRect.left + rect.width / 2;
+    const cy = rect.top - stageRect.top + rect.height / 2;
+    for (let i = 0; i < 20; i++) {
+        anim.particles.push({
+            type: 'spark', x: cx, y: cy,
+            vx: (Math.random() - 0.5) * 3,
+            vy: -Math.random() * 4 - 1,
+            life: 1, decay: 0.015 + Math.random() * 0.01,
+            color: `hsl(${Math.random() * 30}, 90%, 50%)`,
+            r: Math.random() * 3 + 1,
+        });
+    }
+    anim.particles.push({
+        type: 'ghost', x: cx - 14, y: cy - 14,
+        vy: -0.6, life: 1, decay: 0.004, size: 28,
+    });
+}
+
+function spawnGuardRing(name) {
+    const card = document.getElementById('pcard-' + name);
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    const stageRect = stage.getBoundingClientRect();
+    const cx = rect.left - stageRect.left + rect.width / 2;
+    const cy = rect.top - stageRect.top + rect.height / 2;
+    for (let i = 0; i < 3; i++) {
+        setTimeout(() => {
+            anim.particles.push({
+                type: 'ring', x: cx, y: cy,
+                radius: 5, life: 1, decay: 0.015,
+                color: 'rgba(60,140,255,0.7)',
+            });
+        }, i * 300);
+    }
+}
+
+function spawnSeerParticles(name, isWolf) {
+    const card = document.getElementById('pcard-' + name);
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    const stageRect = stage.getBoundingClientRect();
+    const cx = rect.left - stageRect.left + rect.width / 2;
+    const cy = rect.top - stageRect.top + rect.height / 2;
+    const color = isWolf ? 'rgba(255,60,60,0.8)' : 'rgba(60,220,60,0.8)';
+    for (let i = 0; i < 12; i++) {
+        const angle = (i / 12) * Math.PI * 2;
+        anim.particles.push({
+            type: 'spark', x: cx, y: cy,
+            vx: Math.cos(angle) * 2,
+            vy: Math.sin(angle) * 2,
+            life: 1, decay: 0.02, color, r: 2.5,
+        });
+    }
+}
+
+/* ========== FIREWORKS ========== */
+let fwParticles = [];
+let fwRunning = false;
+
+function startFireworks() {
+    if (gameConfig.enable_fireworks === false) return;
+    fwParticles = [];
+    fwRunning = true;
+    let count = 0;
+    const iv = setInterval(() => {
+        if (count++ >= 8) { clearInterval(iv); return; }
+        const x = Math.random() * fwCanvas.width * 0.6 + fwCanvas.width * 0.2;
+        const y = Math.random() * fwCanvas.height * 0.4 + fwCanvas.height * 0.1;
+        const hue = Math.random() * 360;
+        for (let i = 0; i < 50; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 4 + 1;
+            fwParticles.push({
+                x, y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                life: 1,
+                decay: 0.008 + Math.random() * 0.008,
+                color: `hsl(${hue + Math.random() * 40 - 20}, 90%, ${50 + Math.random() * 30}%)`,
+                r: Math.random() * 2.5 + 1,
+            });
+        }
+    }, 600);
+    requestAnimationFrame(fwLoop);
+    setTimeout(() => { fwRunning = false; }, 7000);
+}
+
+function fwLoop() {
+    fwCtx.clearRect(0, 0, fwCanvas.width, fwCanvas.height);
+    fwParticles = fwParticles.filter(p => {
+        p.x += p.vx; p.y += p.vy;
+        p.vy += 0.04;
+        p.life -= p.decay;
+        if (p.life <= 0) return false;
+        fwCtx.globalAlpha = p.life;
+        fwCtx.fillStyle = p.color;
+        fwCtx.beginPath();
+        fwCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        fwCtx.fill();
+        return true;
+    });
+    fwCtx.globalAlpha = 1;
+    if (fwRunning || fwParticles.length > 0) {
+        requestAnimationFrame(fwLoop);
+    } else {
+        fwCtx.clearRect(0, 0, fwCanvas.width, fwCanvas.height);
+    }
+}
+
+/* ========== CELESTIAL SWITCHING ========== */
+function setPhaseVisual(phase) {
+    const moon = document.getElementById('celestial-moon');
+    const sun = document.getElementById('celestial-sun');
+    const fog = document.getElementById('fog-overlay');
+    const sunOvr = document.getElementById('sunshine-overlay');
+    if (phase === 'night') {
+        stage.className = 'night-bg';
+        moon.classList.remove('hidden');
+        sun.classList.remove('visible');
+        fog.classList.remove('hidden');
+        sunOvr.classList.remove('visible');
+        initStars();
+    } else {
+        stage.className = 'day-bg';
+        moon.classList.add('hidden');
+        sun.classList.add('visible');
+        fog.classList.add('hidden');
+        sunOvr.classList.add('visible');
+    }
+}
+
+/* ========== DEATH FLASH + SHAKE ========== */
+function triggerDeathFlash() {
+    if (gameConfig.enable_death_effects === false) return;
+    const el = document.getElementById('death-flash');
+    el.classList.remove('active');
+    void el.offsetWidth;
+    el.classList.add('active');
+}
+
+function triggerShake() {
+    if (gameConfig.enable_death_effects === false) return;
+    const el = document.getElementById('main');
+    el.classList.remove('shake');
+    void el.offsetWidth;
+    el.classList.add('shake');
+}
+
+/* ========== ROLE SVG ANIMATION ========== */
+function showRoleSvg(role, duration) {
+    const div = document.createElement('div');
+    const cls = role === 'werewolf' ? 'wolf-glow' : role === 'seer' ? 'seer-glow'
+        : role === 'witch' ? 'witch-glow' : role === 'hunter' ? 'hunter-glow'
+        : role === 'guard' ? 'guard-glow' : '';
+    div.className = `role-svg-anim ${cls}`;
+    div.innerHTML = ROLE_SVG[role] || '';
+    div.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:400;animation:role-pulse 1s ease-in-out;';
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), duration || 1500);
+}
+
+/* ========== TYPING EFFECT ========== */
+function typeText(element, text, speed, cb) {
+    if (currentSpeed === 'instant') {
+        element.textContent = text;
+        if (cb) cb();
+        scrollStage();
+        return;
+    }
+    let i = 0;
+    element.textContent = '';
+    const interval = {slow: 30, medium: 12, fast: 4}[currentSpeed] || speed || 12;
+    const chunk = currentSpeed === 'fast' ? 3 : 1;
+    function tick() {
+        if (i >= text.length) {
+            if (cb) cb();
+            scrollStage();
+            return;
+        }
+        i = Math.min(i + chunk, text.length);
+        element.textContent = text.substring(0, i);
+        setTimeout(tick, interval);
+    }
+    tick();
+}
+
+function scrollStage() {
+    if (_scrollTimer) return;
+    _scrollTimer = requestAnimationFrame(() => {
+        stage.scrollTop = stage.scrollHeight;
+        _scrollTimer = null;
+    });
+}
+
+/* ========== AVATAR SYSTEM ========== */
+function getAvatarEmoji(gender) {
+    return gender === 'female' ? '👩' : '👨';
+}
+function getAvatarClass(gender) {
+    return gender === 'female' ? 'female' : 'male';
+}
+function getPlayerGender(name) {
+    const p = players.find(pl => pl.name === name);
+    return p ? p.gender : 'male';
+}
+function _getUserRole() {
+    const p = players.find(pl => pl.is_user);
+    return p ? p.role : null;
+}
+
+/* ========== SOUND SYSTEM ========== */
+const ROLE_SOUNDS = {
+    werewolf() {
+        if (!sound.ctx) return;
+        const t = sound.ctx.currentTime;
+        const o = sound.ctx.createOscillator();
+        const g = sound.ctx.createGain();
+        o.connect(g); g.connect(sound.ctx.destination);
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(120, t);
+        o.frequency.exponentialRampToValueAtTime(50, t + 0.8);
+        g.gain.setValueAtTime(0.12, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+        o.start(t); o.stop(t + 0.8);
+    },
+    seer() {
+        if (!sound.ctx) return;
+        const t = sound.ctx.currentTime;
+        [880, 1320].forEach((f, i) => {
+            const o = sound.ctx.createOscillator();
+            const g = sound.ctx.createGain();
+            o.connect(g); g.connect(sound.ctx.destination);
+            o.type = 'sine'; o.frequency.setValueAtTime(f, t + i * 0.15);
+            g.gain.setValueAtTime(0.07, t + i * 0.15);
+            g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.15 + 0.5);
+            o.start(t + i * 0.15); o.stop(t + i * 0.15 + 0.5);
+        });
+    },
+    witch() {
+        if (!sound.ctx) return;
+        const t = sound.ctx.currentTime;
+        const o = sound.ctx.createOscillator();
+        const lfo = sound.ctx.createOscillator();
+        const lfoGain = sound.ctx.createGain();
+        const g = sound.ctx.createGain();
+        lfo.connect(lfoGain); lfoGain.connect(o.frequency);
+        o.connect(g); g.connect(sound.ctx.destination);
+        o.type = 'sine'; o.frequency.setValueAtTime(280, t);
+        lfo.type = 'sine'; lfo.frequency.setValueAtTime(8, t);
+        lfoGain.gain.setValueAtTime(80, t);
+        g.gain.setValueAtTime(0.08, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+        o.start(t); lfo.start(t); o.stop(t + 0.7); lfo.stop(t + 0.7);
+    },
+    hunter() {
+        if (!sound.ctx) return;
+        const t = sound.ctx.currentTime;
+        const o = sound.ctx.createOscillator();
+        const g = sound.ctx.createGain();
+        o.connect(g); g.connect(sound.ctx.destination);
+        o.type = 'square';
+        o.frequency.setValueAtTime(600, t);
+        o.frequency.exponentialRampToValueAtTime(150, t + 0.25);
+        g.gain.setValueAtTime(0.1, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+        o.start(t); o.stop(t + 0.25);
+    },
+    guard() {
+        if (!sound.ctx) return;
+        const t = sound.ctx.currentTime;
+        const o = sound.ctx.createOscillator();
+        const g = sound.ctx.createGain();
+        o.connect(g); g.connect(sound.ctx.destination);
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(300, t);
+        g.gain.setValueAtTime(0.09, t);
+        g.gain.setValueAtTime(0.09, t + 0.4);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+        o.start(t); o.stop(t + 0.6);
+    },
+    villager() {
+        if (!sound.ctx) return;
+        const t = sound.ctx.currentTime;
+        const o = sound.ctx.createOscillator();
+        const g = sound.ctx.createGain();
+        o.connect(g); g.connect(sound.ctx.destination);
+        o.type = 'sine'; o.frequency.setValueAtTime(440, t);
+        g.gain.setValueAtTime(0.05, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+        o.start(t); o.stop(t + 0.15);
+    }
+};
+const sound = {
+    ctx: null,
+    enabled: true,
+    init() {
+        if (this.ctx) { this.ctx.resume(); return; }
+        try {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            if (this.ctx.state === 'suspended') this.ctx.resume();
+        } catch(e) { console.warn('AudioContext init failed:', e); }
+    },
+    play(type) {
+        if (!this.enabled || !this.ctx) return;
+        try {
+            const t = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.connect(gain); gain.connect(this.ctx.destination);
+            switch(type) {
+                case 'night':
+                    osc.type = 'sine'; osc.frequency.setValueAtTime(180, t);
+                    osc.frequency.exponentialRampToValueAtTime(80, t + 1.5);
+                    gain.gain.setValueAtTime(0.08, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 1.5);
+                    osc.start(t); osc.stop(t + 1.5); break;
+                case 'day':
+                    osc.type = 'sine'; osc.frequency.setValueAtTime(600, t);
+                    osc.frequency.exponentialRampToValueAtTime(800, t + 0.15);
+                    gain.gain.setValueAtTime(0.06, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+                    osc.start(t); osc.stop(t + 0.3); break;
+                case 'death':
+                    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(200, t);
+                    osc.frequency.exponentialRampToValueAtTime(40, t + 0.6);
+                    gain.gain.setValueAtTime(0.12, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+                    osc.start(t); osc.stop(t + 0.6); break;
+                case 'speech':
+                    osc.type = 'sine'; osc.frequency.setValueAtTime(440, t);
+                    gain.gain.setValueAtTime(0.03, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+                    osc.start(t); osc.stop(t + 0.08); break;
+                case 'vote':
+                    osc.type = 'square'; osc.frequency.setValueAtTime(800, t);
+                    gain.gain.setValueAtTime(0.04, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+                    osc.start(t); osc.stop(t + 0.06); break;
+                case 'win':
+                    [523, 659, 784, 1047].forEach((f, i) => {
+                        const o2 = this.ctx.createOscillator();
+                        const g2 = this.ctx.createGain();
+                        o2.connect(g2); g2.connect(this.ctx.destination);
+                        o2.type = 'sine'; o2.frequency.setValueAtTime(f, t + i * 0.2);
+                        g2.gain.setValueAtTime(0.08, t + i * 0.2);
+                        g2.gain.exponentialRampToValueAtTime(0.001, t + i * 0.2 + 0.4);
+                        o2.start(t + i * 0.2); o2.stop(t + i * 0.2 + 0.4);
+                    });
+                    return;
+                case 'lose':
+                    osc.type = 'sine'; osc.frequency.setValueAtTime(400, t);
+                    osc.frequency.exponentialRampToValueAtTime(150, t + 0.8);
+                    gain.gain.setValueAtTime(0.1, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+                    osc.start(t); osc.stop(t + 0.8); break;
+            }
+        } catch(e) {}
+    }
+};
+
+/* ========== SIDEBAR SELECTION ========== */
+let selectingTarget = false;
+let selectedTarget = null;
+let selectionMode = null; // 'vote', 'night_kill', 'night_check', 'night_guard', 'night_poison', 'night_save'
+
+function enableSidebarSelection(mode, allowedTargets) {
+    selectingTarget = true;
+    selectedTarget = null;
+    selectionMode = mode;
+    document.querySelectorAll('.player-card').forEach(card => {
+        const name = card.id.replace('pcard-', '');
+        const isDead = card.classList.contains('dead');
+        const isAllowed = !allowedTargets || allowedTargets.includes(name);
+        if (!isDead && isAllowed) {
+            card.classList.add('selectable');
+            card.onclick = () => {
+                document.querySelectorAll('.player-card.selectable').forEach(c => c.classList.remove('selected-target'));
+                card.classList.add('selected-target');
+                selectedTarget = name;
+                const okBtn = document.getElementById('btn-vote-ok');
+                okBtn.disabled = false;
+                document.getElementById('vote-info-text').innerHTML = `已选择：${name} <span class="countdown-badge" id="vote-countdown"></span>`;
+                clearVoteCountdown();
+            };
+        }
+    });
+    document.getElementById('vote-confirm-bar').style.display = 'flex';
+    document.getElementById('btn-vote-ok').disabled = true;
+    const infoEl = document.getElementById('vote-info-text');
+    const modeText = mode === 'vote' ? '请点击侧边栏玩家选择投票目标'
+        : mode === 'night_kill' ? '🐺 请选择要击杀的目标'
+        : mode === 'night_check' ? '🔮 请选择要查验的玩家'
+        : mode === 'night_guard' ? '🛡️ 请选择要守护的玩家'
+        : mode === 'night_poison' ? '🧪 请选择要毒杀的玩家（或不选）'
+        : mode === 'night_save' ? '🧪 是否使用解药救此人？'
+        : '请选择目标';
+    infoEl.innerHTML = modeText + ' <span class="countdown-badge" id="vote-countdown"></span>';
+    if (mode === 'vote') {
+        startVoteCountdown(20);
+    } else {
+        startVoteCountdown(60);
+    }
+}
+
+function disableSidebarSelection() {
+    clearVoteCountdown();
+    selectingTarget = false;
+    selectedTarget = null;
+    selectionMode = null;
+    document.querySelectorAll('.player-card').forEach(card => {
+        card.classList.remove('selectable', 'selected-target');
+        card.onclick = () => playRoleSound(card.id.replace('pcard-', ''));
+    });
+    document.getElementById('vote-confirm-bar').style.display = 'none';
+}
+
+function confirmVoteSelection() {
+    if (!selectedTarget || !gameId) return;
+    if (selectionMode === 'vote') {
+        api('/api/werewolf/action', {game_id: gameId, action: 'user_vote', target: selectedTarget}).catch(() => {});
+    } else {
+        api('/api/werewolf/action', {game_id: gameId, action: 'night_action', target: selectedTarget}).catch(() => {});
+    }
+    disableSidebarSelection();
+}
+
+function confirmNoAction() {
+    if (!gameId) return;
+    api('/api/werewolf/action', {game_id: gameId, action: 'night_action', target: null}).catch(() => {});
+    disableSidebarSelection();
+}
+
+/* ========== SEER MARKS ========== */
+let seerChecks = {};
+
+function markSeerCheck(name, isWolf) {
+    seerChecks[name] = isWolf;
+    const card = document.getElementById('pcard-' + name);
+    if (!card) return;
+    let mark = card.querySelector('.seer-mark');
+    if (!mark) {
+        mark = document.createElement('div');
+        mark.className = 'seer-mark';
+        card.appendChild(mark);
+    }
+    mark.className = 'seer-mark ' + (isWolf ? 'wolf-mark' : 'good-mark');
+    mark.textContent = isWolf ? '狼' : '好';
+}
+
+/* ========== COUNTDOWN TIMERS ========== */
+let speechCountdownTimer = null;
+let voteCountdownTimer = null;
+
+function startSpeechCountdown(seconds) {
+    clearSpeechCountdown();
+    const badge = document.getElementById('speech-countdown');
+    let remaining = seconds;
+    badge.textContent = remaining + 's';
+    badge.classList.remove('urgent');
+    speechCountdownTimer = setInterval(() => {
+        remaining--;
+        badge.textContent = remaining + 's';
+        if (remaining <= 10) badge.classList.add('urgent');
+        if (remaining <= 0) {
+            clearSpeechCountdown();
+            const input = document.getElementById('user-speech-input');
+            if (input.value.trim()) {
+                submitUserSpeech();
+            } else {
+                generateAiSpeechThenSend();
+            }
+        }
+    }, 1000);
+}
+
+function clearSpeechCountdown() {
+    if (speechCountdownTimer) { clearInterval(speechCountdownTimer); speechCountdownTimer = null; }
+    const badge = document.getElementById('speech-countdown');
+    if (badge) badge.textContent = '';
+}
+
+function startVoteCountdown(seconds) {
+    clearVoteCountdown();
+    const badge = document.getElementById('vote-countdown');
+    let remaining = seconds;
+    badge.textContent = remaining + 's';
+    badge.classList.remove('urgent');
+    voteCountdownTimer = setInterval(() => {
+        remaining--;
+        badge.textContent = remaining + 's';
+        if (remaining <= 5) badge.classList.add('urgent');
+        if (remaining <= 0) {
+            clearVoteCountdown();
+            if (selectionMode === 'vote') {
+                api('/api/werewolf/action', {game_id: gameId, action: 'user_vote', target: null}).catch(() => {});
+            } else {
+                api('/api/werewolf/action', {game_id: gameId, action: 'night_action', target: null}).catch(() => {});
+            }
+            disableSidebarSelection();
+        }
+    }, 1000);
+}
+
+function clearVoteCountdown() {
+    if (voteCountdownTimer) { clearInterval(voteCountdownTimer); voteCountdownTimer = null; }
+    const badge = document.getElementById('vote-countdown');
+    if (badge) badge.textContent = '';
+}
+
+/* ========== USER SPEECH ========== */
+let userSpeechPlayer = null;
+let aiGenerating = false;
+
+function submitUserSpeech() {
+    const input = document.getElementById('user-speech-input');
+    const text = input.value.trim();
+    if (!text || !gameId) return;
+    input.value = '';
+    hideSpeechPanel();
+    api('/api/werewolf/action', {game_id: gameId, action: 'user_speech', text: text}).catch(() => {});
+}
+
+async function generateAiSpeechPreview() {
+    if (!gameId || aiGenerating) return;
+    aiGenerating = true;
+    const input = document.getElementById('user-speech-input');
+    const btnAi = document.getElementById('btn-ai-speech');
+    const btnRegen = document.getElementById('btn-ai-regenerate');
+    btnAi.disabled = true;
+    btnAi.textContent = '⏳ 生成中...';
+    try {
+        const data = await api('/api/werewolf/generate_speech', {game_id: gameId});
+        if (data.ok && data.speech) {
+            input.value = data.speech;
+            btnRegen.style.display = 'inline-block';
+        } else {
+            input.value = data.msg || '生成失败，请手动输入';
+        }
+    } catch(e) {
+        input.value = '生成失败，请手动输入';
+    }
+    btnAi.disabled = false;
+    btnAi.textContent = '🤖 AI帮我发言';
+    aiGenerating = false;
+    input.focus();
+}
+
+function generateAiSpeechThenSend() {
+    const input = document.getElementById('user-speech-input');
+    if (input.value.trim()) {
+        submitUserSpeech();
+    } else {
+        api('/api/werewolf/generate_speech', {game_id: gameId}).then(data => {
+            if (data.ok && data.speech) {
+                input.value = data.speech;
+            }
+            submitUserSpeech();
+        }).catch(() => { submitUserSpeech(); });
+    }
+}
+
+function showSpeechPanel(playerName) {
+    userSpeechPlayer = playerName;
+    const panel = document.getElementById('user-speech-panel');
+    const hint = document.getElementById('speech-hint-text');
+    hint.innerHTML = `轮到你了（${playerName}） <span class="countdown-badge" id="speech-countdown"></span>`;
+    panel.style.display = 'block';
+    document.getElementById('btn-ai-regenerate').style.display = 'none';
+    document.getElementById('user-speech-input').value = '';
+    document.getElementById('user-speech-input').focus();
+    startSpeechCountdown(60);
+}
+
+function hideSpeechPanel() {
+    clearSpeechCountdown();
+    document.getElementById('user-speech-panel').style.display = 'none';
+    userSpeechPlayer = null;
+}
+
+function showVotePanel(playerName, targets) {
+    enableSidebarSelection('vote', targets);
+}
+
+function hideVotePanel() {
+    disableSidebarSelection();
+}
+
+/* ========== RANKINGS ========== */
+async function showRankings() {
+    const overlay = document.getElementById('ranking-overlay');
+    overlay.style.display = 'flex';
+    try {
+        const data = await api('/api/werewolf/rankings');
+        let html = '';
+        if (data.characters && data.characters.length) {
+            html += '<div class="rank-section"><h4>🎭 角色积分榜</h4><table class="rank-table"><tr><th>#</th><th>角色</th><th>积分</th><th>场次</th><th>胜场</th></tr>';
+            data.characters.forEach((c, i) => {
+                const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+                html += `<tr><td class="rank-num">${medal}</td><td>${c.character_name}</td><td class="pts">${c.total_points}</td><td>${c.games_played}</td><td>${c.games_won}</td></tr>`;
+            });
+            html += '</table></div>';
+        }
+        if (data.users && data.users.length) {
+            html += '<div class="rank-section"><h4>👤 玩家积分榜</h4><table class="rank-table"><tr><th>#</th><th>玩家</th><th>积分</th><th>场次</th><th>胜场</th></tr>';
+            data.users.forEach((u, i) => {
+                const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+                html += `<tr><td class="rank-num">${medal}</td><td>${u.username}</td><td class="pts">${u.total_points}</td><td>${u.games_played}</td><td>${u.games_won}</td></tr>`;
+            });
+            html += '</table></div>';
+        }
+        if (!html) html = '<p style="color:#888;text-align:center">暂无数据</p>';
+        document.getElementById('ranking-content').innerHTML = html;
+    } catch(e) {
+        document.getElementById('ranking-content').innerHTML = '<p style="color:#a66">加载失败</p>';
+    }
+}
+
+/* ========== REPLAY CENTER ========== */
+async function showReplayCenter() {
+    const overlay = document.getElementById('replay-overlay');
+    overlay.style.display = 'flex';
+    const content = document.getElementById('replay-content');
+    content.innerHTML = '<p style="color:#888;text-align:center">加载中...</p>';
+    try {
+        const data = await api('/api/werewolf/replays');
+        const replays = data.replays || [];
+        if (!replays.length) {
+            content.innerHTML = '<p style="color:#888;text-align:center">暂无回放记录</p>';
+            return;
+        }
+        let html = '';
+        for (const r of replays) {
+            const resultLabel = r.winner === 'village' ? '好人胜' : r.winner === 'werewolf' ? '狼人胜' : '中止';
+            const cls = r.winner === 'village' ? 'village' : r.winner === 'werewolf' ? 'werewolf' : '';
+            html += `<div class="replay-item" onclick="viewReplay('${r.id}')">
+                <div class="replay-result ${cls}">${resultLabel}</div>
+                <div class="replay-meta">${r.theme || '自由模式'} · ${r.total}人局 · ${r.created_at || ''}</div>
+            </div>`;
+        }
+        content.innerHTML = html;
+    } catch(e) {
+        content.innerHTML = '<p style="color:#a66">加载失败</p>';
+    }
+}
+
+async function viewReplay(replayId) {
+    document.getElementById('replay-overlay').style.display = 'none';
+    const data = await api('/api/werewolf/replay/' + replayId);
+    if (!data.ok) { alert(data.msg || '加载失败'); return; }
+    const replay = data.replay;
+    const overlay = document.getElementById('rules-overlay');
+    const panel = document.getElementById('rules-panel');
+    panel.querySelector('h3').textContent = '📼 回放详情';
+    let html = `<h4>基本信息</h4><p>主题：${replay.config.theme || '自由'} · ${replay.config.total}人局 · ${replay.winner === 'village' ? '好人胜' : replay.winner === 'werewolf' ? '狼人胜' : '中止'}</p>`;
+    if (replay.config.players) {
+        html += '<h4>玩家</h4><p>' + replay.config.players.map(p => `${ROLE_ICONS[p.role] || ''} ${p.name}(${ROLE_NAMES[p.role] || p.role})`).join('、') + '</p>';
+    }
+    if (replay.events && replay.events.length) {
+        html += '<h4>事件流</h4>';
+        for (const evt of replay.events) {
+            const e = evt.event;
+            if (e === 'phase_change') html += `<p>${evt.phase === 'night' ? '🌙' : '☀️'} 第${evt.round}${evt.phase === 'night' ? '夜' : '天'}</p>`;
+            else if (e === 'action_start') {
+                const roleName = {werewolf:'🐺 狼人',seer:'🔮 预言家',witch:'🧪 女巫',guard:'🛡️ 守卫',hunter:'🏹 猎人'}[evt.role] || evt.role;
+                html += `<p style="color:#888">▸ ${roleName}${evt.player ? '（' + evt.player + '）' : ''}行动</p>`;
+            }
+            else if (e === 'action_text') html += `<p style="color:#888;padding-left:12px">  ${ROLE_ICONS[evt.role]||''} ${evt.player ? evt.player+'：' : ''}${evt.text}</p>`;
+            else if (e === 'wolf_discuss') html += `<p style="color:#caa;padding-left:12px">  🐺 ${evt.text}</p>`;
+            else if (e === 'seer_result') html += `<p style="padding-left:12px">  🔮 查验【${evt.target}】：${evt.result === 'werewolf' ? '🐺狼人' : '✅好人'}</p>`;
+            else if (e === 'seer_result_user') html += `<p style="padding-left:12px">  🔮 查验【${evt.target}】：${evt.is_wolf ? '🐺狼人' : '✅好人'}</p>`;
+            else if (e === 'death') html += `<p style="color:#caa">💀 ${evt.cause === 'night' ? '夜晚' : ''}${evt.players ? evt.players.join('、') : ''}死亡${evt.peace ? '（平安夜）' : ''}</p>`;
+            else if (e === 'speech') html += `<p>🎤 ${evt.player}：${(evt.text || '').substring(0, 80)}</p>`;
+            else if (e === 'last_words') html += `<p style="color:#caa">💔 遗言 ${evt.player}：${(evt.text || '').substring(0, 80)}</p>`;
+            else if (e === 'vote_cast') html += `<p style="color:#aa8aff">🗳️ ${evt.from} → ${evt.to}</p>`;
+            else if (e === 'vote_result') html += `<p>⚖️ ${evt.eliminated ? evt.eliminated + '被放逐' : (evt.reason || '平票')}</p>`;
+            else if (e === 'hunter_shoot') html += `<p style="color:#faa">🏹 猎人${evt.player}开枪带走了${evt.target}</p>`;
+            else if (e === 'game_over') html += `<p style="font-weight:700">${evt.winner === 'village' ? '🎉 好人胜' : '🐺 狼人胜'}</p>`;
+        }
+    }
+    html += '<button class="rules-close" onclick="document.getElementById(\'rules-overlay\').style.display=\'none\';document.getElementById(\'rules-panel\').querySelector(\'h3\').textContent=\'📖 狼人杀游戏规则\';">关闭</button>';
+    panel.innerHTML = html;
+    overlay.style.display = 'flex';
+}
+
+/* ========== API ========== */
+async function api(url, body) {
+    const r = await fetch(url, {
+        method: body ? 'POST' : 'GET',
+        headers: {'Content-Type': 'application/json'},
+        body: body ? JSON.stringify(body) : undefined,
+        credentials: 'same-origin',
+    });
+    return r.json();
+}
+
+/* ========== INIT ========== */
+async function init() {
+    try {
+        const cfgData = await api('/api/werewolf/config');
+        if (cfgData.ok) gameConfig = cfgData.config;
+    } catch(e) {}
+    gameConfig = gameConfig || {};
+    if (localStorage.getItem("ww_anim") === "off") {
+        gameConfig.enable_animation = false;
+        gameConfig.enable_stars_bg = false;
+        gameConfig.enable_card_flip = false;
+        gameConfig.enable_death_effects = false;
+        gameConfig.enable_fireworks = false;
+    }
+    if (!gameConfig.enable_sound) { sound.enabled = false; }
+    loadThemes();
+    initCountSelector();
+    initModeSelector('identity-selector', 'data-mode', v => { userMode = v; });
+    initModeSelector('speech-mode-selector', 'data-speech', v => { speechMode = v; });
+    initStars();
+    initAnimLoop();
+    document.getElementById('start-btn').onclick = startGame;
+    document.getElementById('btn-step').onclick = () => {
+        if (gameConfig && gameConfig.auto_step) {
+            if (autoStepTimer) {
+                clearAutoStep();
+                document.getElementById('btn-step').textContent = '▶ 继续自动';
+            } else {
+                doStep();
+            }
+        } else {
+            doStep();
+        }
+    };
+    document.getElementById('btn-stop').onclick = stopGame;
+    document.getElementById('btn-save-replay').onclick = saveReplay;
+    document.getElementById('btn-new-game').onclick = () => location.reload();
+    document.getElementById('btn-restart').onclick = restartToSetup;
+    document.getElementById('btn-back-chat').onclick = () => location.href = '/';
+    document.getElementById('sound-toggle').onclick = toggleSound;
+    document.getElementById('btn-ranking').onclick = showRankings;
+    document.getElementById('btn-close-ranking').onclick = () => { document.getElementById('ranking-overlay').style.display = 'none'; };
+    document.getElementById('btn-reset-stats').onclick = async () => {
+        if (!confirm('确定要清空你的所有狼人杀积分数据吗？此操作不可恢复。')) return;
+        try {
+            const data = await api('/api/werewolf/reset_stats', {});
+            alert(data.msg);
+            showRankings();
+        } catch(e) { alert('操作失败'); }
+    };
+    document.getElementById('btn-rules').onclick = () => { document.getElementById('rules-overlay').style.display = 'flex'; };
+    document.getElementById('btn-close-rules').onclick = () => { document.getElementById('rules-overlay').style.display = 'none'; };
+    document.getElementById('btn-replays').onclick = showReplayCenter;
+    document.getElementById('btn-close-replay').onclick = () => { document.getElementById('replay-overlay').style.display = 'none'; };
+    document.getElementById('btn-ai-speech').onclick = generateAiSpeechPreview;
+    document.getElementById('btn-ai-regenerate').onclick = generateAiSpeechPreview;
+    document.getElementById('btn-send-speech').onclick = submitUserSpeech;
+    document.getElementById('btn-vote-ok').onclick = confirmVoteSelection;
+    document.querySelectorAll('.speed-btn').forEach(b => {
+        b.onclick = () => {
+            document.querySelectorAll('.speed-btn').forEach(x => x.classList.remove('active'));
+            b.classList.add('active');
+            currentSpeed = b.dataset.speed;
+            if (gameId) api('/api/werewolf/speed', {game_id: gameId, speed: b.dataset.speed});
+        };
+    });
+}
+
+function toggleSound() {
+    sound.enabled = !sound.enabled;
+    if (sound.enabled) sound.init();
+    const btn = document.getElementById('sound-toggle');
+    btn.textContent = sound.enabled ? '🔊' : '🔇';
+    btn.classList.toggle('muted', !sound.enabled);
+}
+
+function initModeSelector(containerId, attr, setter) {
+    document.querySelectorAll(`#${containerId} .mode-btn`).forEach(b => {
+        b.onclick = () => {
+            document.querySelectorAll(`#${containerId} .mode-btn`).forEach(x => x.classList.remove('selected'));
+            b.classList.add('selected');
+            setter(b.getAttribute(attr));
+        };
+    });
+}
+
+async function loadThemes() {
+    const data = await api('/api/werewolf/themes');
+    const grid = document.getElementById('theme-grid');
+    let html = '<button class="theme-btn selected" data-theme="">🎲 自由模式<div class="count">随机人格</div></button>';
+    if (data.preset) {
+        for (const t of data.preset) {
+            html += `<button class="theme-btn" data-theme="${t.name}">${t.name}<div class="count">${t.count}个角色</div></button>`;
+        }
+    }
+    grid.innerHTML = html;
+    grid.querySelectorAll('.theme-btn').forEach(b => {
+        b.onclick = () => {
+            grid.querySelectorAll('.theme-btn').forEach(x => x.classList.remove('selected'));
+            b.classList.add('selected');
+            selectedTheme = b.dataset.theme || null;
+        };
+    });
+}
+
+function initCountSelector() {
+    const el = document.getElementById('count-selector');
+    for (let n = 6; n <= 12; n++) {
+        const btn = document.createElement('button');
+        btn.className = 'count-btn' + (n === 9 ? ' selected' : '');
+        btn.textContent = n;
+        btn.onclick = () => {
+            el.querySelectorAll('.count-btn').forEach(x => x.classList.remove('selected'));
+            btn.classList.add('selected');
+            selectedCount = n;
+        };
+        el.appendChild(btn);
+    }
+}
+
+/* ========== GAME START ========== */
+async function startGame() {
+    const btn = document.getElementById('start-btn');
+    btn.disabled = true;
+    btn.textContent = '创建中...';
+    sound.init();
+    const data = await api('/api/werewolf/start', {
+        total: selectedCount,
+        user_mode: userMode,
+        theme: selectedTheme || undefined,
+        speech_mode: speechMode,
+    });
+    if (!data.ok) {
+        alert(data.msg);
+        btn.disabled = false;
+        btn.textContent = '开始游戏';
+        return;
+    }
+    gameId = data.game_id;
+    players = data.players;
+    document.getElementById('setup-overlay').style.display = 'none';
+    if (gameConfig.enable_card_flip === false) {
+        document.getElementById('btn-step').disabled = false;
+        renderPlayers(data);
+    } else {
+        showCardFlip(data);
+    }
+}
+
+function showCardFlip(data) {
+    const overlay = document.getElementById('card-flip-overlay');
+    const container = document.getElementById('card-container');
+    overlay.style.display = 'flex';
+    container.innerHTML = '';
+    for (const p of data.players) {
+        const card = document.createElement('div');
+        card.className = 'flip-card';
+        const role = (userMode === 'god' || (userMode === 'player' && p.name === data.user_role)) ?
+            (data.user_role ? ROLE_ICONS[data.user_role] || '👤' : '') : '';
+        const avatar = getAvatarEmoji(p.gender);
+        card.innerHTML = `
+            <div class="flip-card-inner">
+                <div class="flip-card-front"><span class="q-mark">?</span></div>
+                <div class="flip-card-back">
+                    <div class="card-name">${avatar} ${p.name}</div>
+                    <div class="card-role">${role}</div>
+                    <div class="card-role-name">${p.role ? ROLE_NAMES[p.role] || '' : ''}</div>
+                </div>
+            </div>`;
+        container.appendChild(card);
+    }
+    const cards = container.querySelectorAll('.flip-card');
+    let idx = 0;
+    const flipDelay = (currentSpeed === 'instant' || currentSpeed === 'fast') ? 50 : 400;
+    const flipInterval = setInterval(() => {
+        if (idx >= cards.length) {
+            clearInterval(flipInterval);
+            setTimeout(() => {
+                overlay.style.display = 'none';
+                document.getElementById('btn-step').disabled = false;
+                renderPlayers(data);
+                if (gameConfig && gameConfig.auto_step) {
+                    document.getElementById('btn-step').textContent = '⏸ 暂停自动';
+                    triggerAutoStep();
+                }
+            }, 1000);
+            return;
+        }
+        cards[idx].classList.add('flipped');
+        idx++;
+    }, 400);
+}
+
+function playRoleSound(playerName) {
+    sound.init();
+    if (userMode === 'god') {
+        const p = players.find(pl => pl.name === playerName);
+        if (p && ROLE_SOUNDS[p.role]) { ROLE_SOUNDS[p.role](); return; }
+    } else if (userMode === 'player') {
+        const p = players.find(pl => pl.name === playerName && pl.is_user);
+        if (p && ROLE_SOUNDS[p.role]) { ROLE_SOUNDS[p.role](); return; }
+    }
+    ROLE_SOUNDS.villager();
+}
+
+function renderPlayers(data) {
+    playerList.innerHTML = '';
+    const plist = data.players || players;
+    for (const p of plist) {
+        const card = document.createElement('div');
+        card.className = 'player-card';
+        card.id = 'pcard-' + p.name;
+        card.style.cursor = 'pointer';
+        card.title = '点击播放角色音效';
+        card.onclick = () => playRoleSound(p.name);
+        const roleIcon = (userMode === 'god' && p.role) ? ROLE_ICONS[p.role] || '' : '';
+        const avatarEmoji = getAvatarEmoji(p.gender);
+        const avatarClass = getAvatarClass(p.gender);
+        card.innerHTML = `
+            <div class="avatar-wrap ${avatarClass}">${avatarEmoji}</div>
+            <div class="info">
+                <div class="name">${p.name}</div>
+                <div class="seat">座位 ${p.seat}</div>
+                <div class="status alive">🔴 存活</div>
+            </div>
+            ${roleIcon ? `<div class="role-badge">${roleIcon}</div>` : ''}
+            <div class="vote-count"></div>`;
+        playerList.appendChild(card);
+    }
+}
+
+/* ========== STEP ========== */
+function clearAutoStep() {
+    if (autoStepTimer) { clearTimeout(autoStepTimer); autoStepTimer = null; }
+}
+
+function triggerAutoStep() {
+    clearAutoStep();
+    const delay = (gameConfig && gameConfig.auto_step_delay) || 8;
+    const maxRounds = (gameConfig && gameConfig.max_rounds) || 12;
+    if (parseInt(roundInfo.textContent) >= maxRounds) return;
+    autoStepTimer = setTimeout(() => {
+        if (gameId && !stepping && !(game && game.gameOver)) {
+            doStep();
+        }
+    }, delay * 1000);
+}
+
+async function doStep() {
+    if (!gameId || stepping) return;
+    stepping = true;
+    clearAutoStep();
+    const btn = document.getElementById('btn-step');
+    btn.disabled = true;
+    btn.textContent = '⏳ 进行中...';
+    try {
+        const resp = await fetch('/api/werewolf/step', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({game_id: gameId}),
+            credentials: 'same-origin',
+        });
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, {stream: true});
+            const lines = buf.split('\n');
+            buf = lines.pop();
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        const evt = JSON.parse(line.slice(6));
+                        handleEvent(evt);
+                    } catch(e) {}
+                }
+            }
+        }
+    } catch(e) {
+        console.error(e);
+    }
+    stepping = false;
+    btn.disabled = false;
+    const isAuto = gameConfig && gameConfig.auto_step;
+    btn.textContent = isAuto ? '⏸ 暂停自动' : '▶ 推进一轮';
+    if (isAuto) triggerAutoStep();
+}
+
+/* ========== ENHANCED EVENT HANDLER ========== */
+function handleEvent(evt) {
+    const e = evt.event;
+    if (e === 'phase_change') {
+        if (evt.phase === 'night') {
+            setPhaseVisual('night');
+            roundInfo.textContent = `第 ${evt.round} 夜`;
+            addSystemMsg(`🌙 第 ${evt.round} 夜降临...`, 'phase');
+            sound.play('night');
+            showRoleSvg('werewolf', 1200);
+        } else {
+            setPhaseVisual('day');
+            roundInfo.textContent = `第 ${evt.round} 天`;
+            addSystemMsg(`☀️ 天亮了！第 ${evt.round} 天`, 'phase');
+            sound.play('day');
+        }
+    } else if (e === 'action_start') {
+        const roleIcon = ROLE_ICONS[evt.role] || '❓';
+        const isUserAction = evt.role === _getUserRole() && userMode === 'player';
+        if (isUserAction) {
+            addSystemMsg(`${roleIcon} 轮到你行动了！`, 'action');
+        } else {
+            addSystemMsg(`${roleIcon} ${evt.role === 'werewolf' ? '狼人' : ''}行动中...`, 'action');
+        }
+        if (evt.role === 'guard') showRoleSvg('guard', 1200);
+        else if (evt.role === 'seer') showRoleSvg('seer', 1200);
+        else if (evt.role === 'witch') showRoleSvg('witch', 1200);
+        else if (evt.role === 'werewolf') showRoleSvg('werewolf', 1200);
+    } else if (e === 'action_text') {
+        const isUserAction = evt.role === _getUserRole() && userMode === 'player';
+        if (isUserAction) {
+            addSystemMsg(`${evt.text}`, 'action');
+        } else if (userMode === 'god') {
+            addSystemMsg(`${evt.text}`, 'action');
+        }
+    } else if (e === 'user_night_action') {
+        const modeMap = {guard: 'night_guard', werewolf: 'night_kill', seer: 'night_check', witch_poison: 'night_poison', witch_save: 'night_save'};
+        const mode = modeMap[evt.action_type] || 'night_kill';
+        enableSidebarSelection(mode, evt.targets);
+    } else if (e === 'seer_result_user') {
+        const isWolf = evt.is_wolf;
+        const name = evt.target;
+        markSeerCheck(name, isWolf);
+        const div = document.createElement('div');
+        div.className = 'seer-check-result ' + (isWolf ? 'wolf' : 'good');
+        div.textContent = `🔮 查验【${name}】：${isWolf ? '🐺 狼人！' : '✅ 好人'}`;
+        stage.appendChild(div);
+        stage.scrollTop = stage.scrollHeight;
+    } else if (e === 'wolf_discuss') {
+        addSystemMsg(`🐺 ${evt.text}`, 'action');
+    } else if (e === 'seer_result') {
+        const isWolf = evt.result === 'werewolf' || evt.result === '狼人';
+        if (evt.target) spawnSeerParticles(evt.target, isWolf);
+    } else if (e === 'death') {
+        triggerDeathFlash();
+        triggerShake();
+        sound.play('death');
+        if (evt.players && evt.players.length > 0) {
+            for (const name of evt.players) {
+                const card = document.getElementById('pcard-' + name);
+                if (card) {
+                    card.classList.add('dead');
+                    const status = card.querySelector('.status');
+                    if (status) { status.textContent = '⚰️ 死亡'; status.className = 'status dead-status'; }
+                }
+                spawnDeathParticles(name);
+                addSystemMsg(`💀 ${name} ${evt.cause === 'night' ? '在夜晚倒下了' : '被淘汰了'}`, 'death');
+            }
+        } else if (evt.peace) {
+            addSystemMsg('🌙 平安夜，无人死亡', 'peace');
+        }
+        updateAliveCount();
+    } else if (e === 'speech') {
+        highlightSpeaker(evt.player);
+        addSpeechBubble(evt.player, evt.text);
+        sound.play('speech');
+    } else if (e === 'speech_start') {
+        highlightSpeaker(evt.player);
+    } else if (e === 'vote_cast') {
+        addVoteMsg(evt.from, evt.to, evt.reason);
+        sound.play('vote');
+    } else if (e === 'vote_result') {
+        clearVoteCounts();
+        if (evt.eliminated) {
+            addSystemMsg(`⚖️ 投票结果：${evt.eliminated} 被放逐`, 'death');
+            const card = document.getElementById('pcard-' + evt.eliminated);
+            if (card) {
+                card.classList.add('dead');
+                const status = card.querySelector('.status');
+                if (status) { status.textContent = '⚰️ 死亡'; status.className = 'status dead-status'; }
+            }
+            triggerDeathFlash();
+            triggerShake();
+            spawnDeathParticles(evt.eliminated);
+            updateAliveCount();
+        } else {
+            addSystemMsg('⚖️ 投票结果：' + (evt.reason || '平票，无人出局'), 'system');
+        }
+    } else if (e === 'hunter_shoot') {
+        addSystemMsg(`🏹 猎人 ${evt.player} 开枪带走了 ${evt.target}！`, 'death');
+        sound.play('death');
+        const card = document.getElementById('pcard-' + evt.target);
+        if (card) {
+            card.classList.add('dead');
+            const status = card.querySelector('.status');
+            if (status) { status.textContent = '⚰️ 死亡'; status.className = 'status dead-status'; }
+        }
+        spawnDeathParticles(evt.target);
+        updateAliveCount();
+    } else if (e === 'last_words') {
+        addSpeechBubble(evt.player, `（遗言）${evt.text}`);
+    } else if (e === 'game_over') {
+        showGameOver(evt);
+        if (evt.winner === 'village') {
+            sound.play('win');
+        } else {
+            sound.play('lose');
+        }
+    } else if (e === 'user_speech_request') {
+        showSpeechPanel(evt.player);
+    } else if (e === 'user_vote_request') {
+        showVotePanel(evt.player, evt.targets || []);
+    } else if (e === 'step_done') {
+        hideSpeechPanel();
+        hideVotePanel();
+        clearVoteCountdown();
+        clearSpeechCountdown();
+        const isAuto = gameConfig && gameConfig.auto_step;
+        if (isAuto && !evt.game_over) triggerAutoStep();
+    }
+}
+
+function clearVoteCounts() {
+    document.querySelectorAll('.player-card .vote-count').forEach(el => {
+        el.style.display = 'none';
+        el.textContent = '';
+    });
+}
+
+function bumpVoteCount(name) {
+    const card = document.getElementById('pcard-' + name);
+    if (!card) return;
+    const badge = card.querySelector('.vote-count');
+    if (!badge) return;
+    let n = parseInt(badge.textContent) || 0;
+    n++;
+    badge.textContent = n;
+    badge.style.display = 'flex';
+}
+
+/* ========== MESSAGE RENDERING ========== */
+function addSystemMsg(text, cls) {
+    const div = document.createElement('div');
+    div.className = 'event-msg system ' + (cls || '');
+    div.textContent = text;
+    stage.appendChild(div);
+    scrollStage();
+}
+
+function addSpeechBubble(speaker, text) {
+    const gender = getPlayerGender(speaker);
+    const avatarEmoji = getAvatarEmoji(gender);
+    const avatarClass = getAvatarClass(gender);
+    const div = document.createElement('div');
+    div.className = 'event-msg speech';
+    div.innerHTML = `
+        <div class="speech-avatar ${avatarClass}">${avatarEmoji}</div>
+        <div class="speech-body">
+            <div class="speaker">🎤 ${escHtml(speaker)}</div>
+            <div class="content" id="speech-content-${Date.now()}"></div>
+        </div>`;
+    stage.appendChild(div);
+    const contentEl = div.querySelector('.content');
+    typeText(contentEl, text, currentSpeed === 'fast' ? 4 : currentSpeed === 'slow' ? 30 : 12);
+    scrollStage();
+}
+
+function addVoteMsg(from, to, reason) {
+    bumpVoteCount(to);
+    const div = document.createElement('div');
+    div.className = 'event-msg vote';
+    div.innerHTML = `<span class="voter">${escHtml(from)}</span> <span class="vote-arrow-icon">➜</span> <span style="color:#faa">${escHtml(to)}</span>${reason ? ' <span style="color:#666;font-size:12px">（' + escHtml(reason) + '）</span>' : ''}`;
+    stage.appendChild(div);
+    scrollStage();
+}
+
+function highlightSpeaker(name) {
+    if (_currentSpeakingCard) _currentSpeakingCard.classList.remove('speaking');
+    const card = document.getElementById('pcard-' + name);
+    if (card) card.classList.add('speaking');
+}
+
+function updateAliveCount() {
+    const alive = document.querySelectorAll('.player-card:not(.dead)').length;
+    aliveCount.textContent = `存活 ${alive} 人`;
+}
+
+function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function showGameOver(evt) {
+    clearAutoStep();
+    if (!evt.scores || evt.scores.length === 0) {
+        const overlay = document.getElementById('game-end-overlay');
+        overlay.style.display = 'flex';
+        document.getElementById('end-result').textContent = '游戏已中止';
+        document.getElementById('end-result').className = 'result';
+        document.getElementById('end-details').textContent = '中途结束，不计入积分和场次';
+        document.getElementById('btn-save-replay').style.display = 'none';
+        document.getElementById('btn-step').disabled = true;
+        document.querySelectorAll('.player-card').forEach(c => c.classList.remove('speaking'));
+        return;
+    }
+    startFireworks();
+    const overlay = document.getElementById('game-end-overlay');
+    overlay.style.display = 'flex';
+    document.getElementById('btn-save-replay').style.display = '';
+    const result = document.getElementById('end-result');
+    result.textContent = evt.winner === 'village' ? '🎉 好人阵营胜利！' : '🐺 狼人阵营胜利！';
+    result.className = 'result ' + evt.winner;
+    const details = document.getElementById('end-details');
+    let html = '<div style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px;">';
+    const scores = evt.scores || [];
+    for (const p of players) {
+        const role = ROLE_NAMES[p.role] || p.role || '?';
+        const icon = ROLE_ICONS[p.role] || '👤';
+        const avatar = getAvatarEmoji(p.gender);
+        const sc = scores.find(s => s.character_name === p.name);
+        const pts = sc ? (sc.points >= 0 ? '+' : '') + sc.points : '';
+        const mvpTag = sc && sc.is_mvp ? ' <span style="color:#ff6;font-size:11px">MVP</span>' : '';
+        const alive = sc ? (sc.won ? '' : '') : '';
+        html += `<span style="background:#1a1a2e;padding:4px 8px;border-radius:6px;font-size:12px;white-space:nowrap;">${avatar} ${icon} ${p.name}：${role}${mvpTag} <span style="color:${sc && sc.points >= 0 ? '#afa' : '#faa'}">${pts}</span></span>`;
+    }
+    html += '</div>';
+    if (scores.length) {
+        const userSc = scores.find(s => s.character_name === (players.find(p => p.is_user) || {}).name);
+        if (userSc) {
+            const color = userSc.points >= 0 ? '#afa' : '#faa';
+            html += `<div style="color:${color};font-size:14px;margin-bottom:8px;">本局得分：<strong>${userSc.points >= 0 ? '+' : ''}${userSc.points}</strong></div>`;
+        }
+    }
+    details.innerHTML = html;
+    document.getElementById('btn-step').disabled = true;
+    document.querySelectorAll('.player-card').forEach(c => c.classList.remove('speaking'));
+}
+
+async function restartToSetup() {
+    clearAutoStep();
+    if (gameId) {
+        await api('/api/werewolf/stop', {game_id: gameId}).catch(() => {});
+    }
+    gameId = null;
+    players = [];
+    stepping = false;
+    document.getElementById('btn-step').disabled = true;
+    document.getElementById('setup-overlay').style.display = 'flex';
+    playerList.innerHTML = '';
+    stage.innerHTML = '<canvas id="stars-canvas" class="stage-canvas"></canvas><canvas id="fx-canvas" class="stage-canvas" style="z-index:2"></canvas><div id="celestial-moon"></div><div id="celestial-sun"></div><div id="fog-overlay"></div><div id="sunshine-overlay"></div>';
+    roundInfo.textContent = '等待开局';
+    aliveCount.textContent = '';
+    initStars();
+}
+
+async function stopGame() {
+    if (!gameId) return;
+    if (!confirm('确定结束游戏？中途结束不计入积分和场次。')) return;
+    await api('/api/werewolf/stop', {game_id: gameId});
+    addSystemMsg('游戏已中止，不计入积分。', 'system');
+    document.getElementById('btn-step').disabled = true;
+    stepping = true;
+}
+
+async function saveReplay() {
+    const data = await api('/api/werewolf/save', {game_id: gameId});
+    if (data.ok) {
+        alert('回放已保存！');
+    } else {
+        alert('保存失败：' + data.msg);
+    }
+}
+
+init();
+</script>
+</body>
+</html>

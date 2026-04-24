@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GlmChat - 注册</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #0f0f0f; color: #e0e0e0; height: 100vh; display: flex; align-items: center; justify-content: center; }
+.card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 40px; width: 360px; }
+.card h1 { text-align: center; margin-bottom: 24px; font-size: 22px; }
+.card .field { margin-bottom: 16px; }
+.card label { display: block; font-size: 13px; color: #888; margin-bottom: 6px; }
+.card input {
+    width: 100%; background: #2a2a2a; color: #e0e0e0; border: 1px solid #333;
+    border-radius: 6px; padding: 10px 12px; font-size: 14px; outline: none;
+}
+.card input:focus { border-color: #2d5aa0; }
+.card .btn {
+    width: 100%; background: #2d5aa0; color: #fff; border: none;
+    border-radius: 6px; padding: 10px; font-size: 15px; cursor: pointer; margin-top: 8px;
+}
+.card .btn:hover { background: #3670c0; }
+.card .btn:disabled { background: #333; cursor: not-allowed; }
+.card .msg { text-align: center; font-size: 13px; margin-top: 12px; }
+.card .msg.error { color: #e55; }
+.card .msg.success { color: #5a5; }
+.card .link { text-align: center; margin-top: 16px; font-size: 13px; }
+.card .link a { color: #5a8fd4; text-decoration: none; }
+.card .link a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="card">
+    <h1>GlmChat 注册</h1>
+    <div class="field">
+        <label>用户名（2-20个字符）</label>
+        <input type="text" id="username" placeholder="给自己起个名字" autofocus />
+    </div>
+    <div class="field">
+        <label>密码（至少4位）</label>
+        <input type="password" id="password" placeholder="设置密码" />
+    </div>
+    <div class="field">
+        <label>确认密码</label>
+        <input type="password" id="password2" placeholder="再输入一次密码" />
+    </div>
+    <button class="btn" id="reg-btn" onclick="doRegister()">注册</button>
+    <div class="msg" id="msg"></div>
+    <div class="link">已有账号？<a href="/login">去登录</a></div>
+</div>
+<script>
+async function doRegister() {
+    const btn = document.getElementById("reg-btn");
+    const msg = document.getElementById("msg");
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value;
+    const password2 = document.getElementById("password2").value;
+    if (!username || !password) { msg.className="msg error"; msg.textContent="请填写用户名和密码"; return; }
+    if (password !== password2) { msg.className="msg error"; msg.textContent="两次密码不一致"; return; }
+    btn.disabled = true;
+    try {
+        const res = await fetch("/api/register", {
+            method: "POST", headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({username, password})
+        });
+        const data = await res.json();
+        if (data.ok) {
+            msg.className = "msg success"; msg.textContent = "注册成功，正在跳转登录...";
+            setTimeout(() => { window.location.href = "/login"; }, 1000);
+        } else {
+            msg.className = "msg error"; msg.textContent = data.msg || "注册失败";
+            btn.disabled = false;
+        }
+    } catch(e) { msg.className="msg error"; msg.textContent="网络错误"; btn.disabled=false; }
+}
+document.getElementById("password2").addEventListener("keydown", e => { if(e.key==="Enter") doRegister(); });
+</script>
+</body>
+</html>

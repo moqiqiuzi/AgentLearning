@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GlmChat Web</title>
+<meta name="username" content="{{ username }}" />
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #0f0f0f; color: #e0e0e0; height: 100vh; display: flex; }
+
+#sidebar {
+    width: 280px; background: #1a1a1a; border-right: 1px solid #2a2a2a;
+    display: flex; flex-direction: column; flex-shrink: 0;
+}
+#sidebar h2 { padding: 16px; font-size: 16px; color: #888; border-bottom: 1px solid #2a2a2a; }
+#persona-search {
+    width: calc(100% - 16px); margin: 8px 8px 0; background: #2a2a2a; color: #e0e0e0; border: none;
+    border-radius: 4px; padding: 6px 8px; font-size: 13px; outline: none;
+}
+#persona-search::placeholder { color: #555; }
+#persona-list { flex: 1; overflow-y: auto; padding: 4px 8px; }
+#persona-list .item {
+    padding: 8px 12px; border-radius: 6px; cursor: pointer; margin-bottom: 2px;
+    display: flex; align-items: center; gap: 8px; font-size: 13px; position: relative;
+}
+#persona-list .item:hover { background: #2a2a2a; }
+#persona-list .item.active { background: #2d5aa0; color: #fff; }
+#persona-list .item .name { font-weight: 600; flex: 1; }
+#persona-list .item .tag { color: #666; font-size: 11px; }
+#persona-list .item .del-btn {
+    display: none; background: #553333; color: #e88; border: none;
+    border-radius: 3px; padding: 1px 6px; font-size: 11px; cursor: pointer;
+}
+#persona-list .item:hover .del-btn.show { display: inline-block; }
+#sidebar-actions { padding: 8px; border-top: 1px solid #2a2a2a; display: flex; flex-direction: column; gap: 4px; }
+.sidebar-btn {
+    width: 100%; background: #2a2a2a; color: #888; border: 1px dashed #444;
+    border-radius: 4px; padding: 7px 8px; font-size: 13px; cursor: pointer; text-align: center;
+}
+.sidebar-btn:hover { background: #333; color: #fff; border-color: #2d5aa0; }
+.sidebar-btn.active-group { background: #2a3a2a; color: #8a8; border-color: #4a6a4a; }
+#group-bar {
+    display: none; padding: 8px; border-top: 1px solid #2a2a2a; background: #1a2a1a;
+}
+#group-bar.active { display: block; }
+#group-bar .group-info { font-size: 12px; color: #8a8; margin-bottom: 6px; }
+#group-bar select {
+    width: 100%; background: #2a2a2a; color: #e0e0e0; border: none;
+    border-radius: 4px; padding: 5px 8px; font-size: 12px; margin-bottom: 6px;
+}
+#group-bar .group-btns { display: flex; gap: 4px; }
+#group-bar .group-btns button {
+    flex: 1; padding: 5px; border: none; border-radius: 4px;
+    cursor: pointer; font-size: 12px;
+}
+#group-bar .btn-go { background: #3a5a3a; color: #afa; }
+#group-bar .btn-stop { background: #5a3a3a; color: #faa; }
+.persona-check {
+    width: 14px; height: 14px; accent-color: #2d5aa0; cursor: pointer; flex-shrink: 0;
+}
+.round-badge {
+    background: #3a5a3a; color: #8a8; padding: 2px 8px; border-radius: 10px;
+    font-size: 11px; font-weight: 600;
+}
+.msg .name-label { font-size: 11px; color: #888; margin-bottom: 2px; font-weight: 600; }
+.msg.group-persona .avatar { background: #5a3a2a; color: #fff; }
+.msg.group-persona .bubble { background: #1e1a1a; border: 1px solid #3a2a2a; }
+#sidebar-bottom { padding: 12px; border-top: 1px solid #2a2a2a; }
+#sidebar-bottom label { font-size: 12px; color: #666; display: block; margin-bottom: 4px; }
+#sidebar-bottom select, #sidebar-bottom input[type="range"] {
+    width: 100%; background: #2a2a2a; color: #e0e0e0; border: none;
+    border-radius: 4px; padding: 6px 8px; font-size: 13px; margin-bottom: 8px;
+}
+#sidebar-bottom input[type="range"] { padding: 0; height: 6px; -webkit-appearance: none; border-radius: 3px; }
+
+#main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+#header {
+    padding: 12px 20px; border-bottom: 1px solid #2a2a2a;
+    display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+}
+#header .title { font-size: 18px; font-weight: 700; }
+#header .persona-badge {
+    background: #2d5aa0; color: #fff; padding: 3px 10px; border-radius: 12px;
+    font-size: 12px; font-weight: 600;
+}
+#header .actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+#header .user-info { font-size: 13px; color: #888; }
+#header .logout-btn {
+    background: #2a2a2a; color: #aaa; border: none; padding: 6px 12px;
+    border-radius: 6px; cursor: pointer; font-size: 12px;
+}
+#header .logout-btn:hover { background: #443333; color: #e88; }
+#header .actions button.action-btn {
+    background: #2a2a2a; color: #aaa; border: none; padding: 6px 12px;
+    border-radius: 6px; cursor: pointer; font-size: 12px;
+}
+#header .actions button.action-btn:hover { background: #333; color: #fff; }
+
+#messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.msg { max-width: 80%; display: flex; gap: 10px; }
+.msg.user { align-self: flex-end; flex-direction: row-reverse; }
+.msg .avatar {
+    width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700;
+}
+.msg.assistant .avatar { background: #2d5aa0; color: #fff; }
+.msg.user .avatar { background: #444; color: #fff; }
+.msg .bubble {
+    padding: 10px 14px; border-radius: 12px; font-size: 14px;
+    line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+}
+.msg.assistant .bubble { background: #1e1e1e; border: 1px solid #2a2a2a; }
+.msg.user .bubble { background: #2d5aa0; color: #fff; }
+.msg .meta { font-size: 11px; color: #555; margin-top: 4px; align-self: flex-end; }
+.msg.system .bubble { background: #1a2a1a; border: 1px solid #2a3a2a; color: #8a8; font-size: 13px; }
+
+.typing::after { content: "▊"; animation: blink 0.8s infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+#input-area { padding: 16px 20px; border-top: 1px solid #2a2a2a; flex-shrink: 0; }
+#input-wrap {
+    display: flex; gap: 10px; background: #1a1a1a; border: 1px solid #2a2a2a;
+    border-radius: 12px; padding: 8px 12px; align-items: flex-end;
+}
+#input-wrap textarea {
+    flex: 1; background: none; color: #e0e0e0; border: none; resize: none;
+    font-size: 14px; line-height: 1.5; max-height: 120px; outline: none;
+    font-family: inherit;
+}
+#send-btn {
+    background: #2d5aa0; color: #fff; border: none; width: 36px; height: 36px;
+    border-radius: 8px; cursor: pointer; font-size: 16px; flex-shrink: 0;
+}
+#send-btn:hover { background: #3670c0; }
+#send-btn:disabled { background: #333; cursor: not-allowed; }
+
+.modal-overlay {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.6); z-index: 1000; align-items: center; justify-content: center;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+    background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px;
+    width: 520px; max-height: 85vh; overflow-y: auto; padding: 24px;
+}
+.modal h2 { margin-bottom: 16px; font-size: 18px; }
+.modal .field { margin-bottom: 12px; }
+.modal .field label { display: block; font-size: 12px; color: #888; margin-bottom: 4px; }
+.modal .field input, .modal .field textarea {
+    width: 100%; background: #2a2a2a; color: #e0e0e0; border: 1px solid #333;
+    border-radius: 4px; padding: 8px 10px; font-size: 13px; outline: none; font-family: inherit; resize: vertical;
+}
+.modal .field textarea { min-height: 50px; }
+.modal .field input:focus, .modal .field textarea:focus { border-color: #2d5aa0; }
+.modal .btn-row { display: flex; gap: 8px; margin-top: 16px; }
+.modal .btn-row button {
+    flex: 1; padding: 8px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+.modal .btn-primary { background: #2d5aa0; color: #fff; }
+.modal .btn-primary:hover { background: #3670c0; }
+.modal .btn-secondary { background: #333; color: #888; }
+.modal .btn-secondary:hover { background: #444; color: #ddd; }
+.modal .btn-ai { background: #2a3a2a; color: #8a8; border: 1px solid #3a4a3a; }
+.modal .btn-ai:hover { background: #334433; }
+.modal .top-btns { display: flex; gap: 8px; margin-bottom: 16px; }
+
+.available-list { max-height: 300px; overflow-y: auto; }
+.available-list .avail-item {
+    padding: 8px 12px; border-radius: 6px; cursor: pointer; margin-bottom: 2px;
+    display: flex; align-items: center; gap: 8px; font-size: 13px;
+}
+.available-list .avail-item:hover { background: #2a2a2a; }
+.available-list .avail-item .aname { font-weight: 600; flex: 1; }
+.available-list .avail-item .atag { color: #666; font-size: 11px; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+    <h2>🎭 人格列表</h2>
+    <input type="text" id="persona-search" placeholder="搜索人格..." />
+    <div id="persona-list"></div>
+    <div id="sidebar-actions">
+        <button class="sidebar-btn" id="group-toggle-btn" onclick="toggleGroupMode()">👥 多人格群聊</button>
+        <button class="sidebar-btn" onclick="showCreateModal()">＋ 创建新人格</button>
+        <button class="sidebar-btn" onclick="showAvailableModal()">📋 启用更多人格</button>
+    </div>
+    <div id="group-bar">
+        <div class="group-info">勾选参与的人格：</div>
+        <select id="group-mode-select">
+            <option value="free">自由讨论 — 所有人回应</option>
+            <option value="round_robin">轮流发言 — 逐个回应</option>
+            <option value="directed">指定发言 — 点击头像指定</option>
+        </select>
+        <div class="group-btns">
+            <button class="btn-go" onclick="startGroupChat()">开始群聊</button>
+            <button class="btn-stop" onclick="stopGroupChat()">结束群聊</button>
+        </div>
+    </div>
+    <div id="sidebar-bottom">
+        <label>模型</label>
+        <select id="model-select"></select>
+        <label>温度: <span id="temp-val">0.1</span></label>
+        <input type="range" id="temp-slider" min="0" max="1" step="0.05" value="0.1" />
+    </div>
+</div>
+
+<div id="main">
+    <div id="header">
+        <span class="title">GlmChat</span>
+        <span class="persona-badge" id="current-persona">智谱小A</span>
+        <span class="round-badge" id="round-badge" style="display:none"></span>
+        <div class="actions">
+            <span class="user-info" id="user-info"></span>
+            <button class="action-btn" onclick="location.href='/werewolf'">🐺 狼人杀</button>
+            <button class="action-btn" onclick="doUndo()">↩ 撤销</button>
+            <button class="action-btn" onclick="doClear()">🗑 清空</button>
+            <button class="logout-btn" onclick="doLogout()">退出</button>
+        </div>
+    </div>
+    <div id="messages"></div>
+    <div id="input-area">
+        <div id="input-wrap">
+            <textarea id="user-input" rows="1" placeholder="输入消息，或 /命令...（Enter 发送，Shift+Enter 换行）"></textarea>
+            <button id="send-btn" onclick="sendMessage()">▶</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="create-modal">
+    <div class="modal">
+        <h2>新建人格</h2>
+        <div class="top-btns">
+            <button class="btn-ai" onclick="aiGenerate()" id="ai-gen-btn">✨ AI 生成</button>
+            <button class="btn-ai" onclick="randomTemplate()">🎲 随机模板</button>
+        </div>
+        <div class="field">
+            <label>人格名称</label>
+            <input type="text" id="cp-name" placeholder="如：海盗、太空船长..." />
+        </div>
+        <div class="field">
+            <label>基础身份</label>
+            <textarea id="cp-identity" placeholder="这个人是谁？什么职业？什么时代？"></textarea>
+        </div>
+        <div class="field">
+            <label>说话语气</label>
+            <textarea id="cp-tone" placeholder="怎么说话？口头禅？语速？"></textarea>
+        </div>
+        <div class="field">
+            <label>优点</label>
+            <textarea id="cp-strengths" placeholder="擅长什么？性格中好的方面？"></textarea>
+        </div>
+        <div class="field">
+            <label>缺点</label>
+            <textarea id="cp-weaknesses" placeholder="有什么弱点？性格缺陷？"></textarea>
+        </div>
+        <div class="field">
+            <label>小习惯与怪癖</label>
+            <textarea id="cp-habits" placeholder="有什么独特的小动作或习惯？"></textarea>
+        </div>
+        <div class="field">
+            <label>价值观与立场</label>
+            <textarea id="cp-values" placeholder="相信什么？反对什么？"></textarea>
+        </div>
+        <div class="field">
+            <label>背景故事</label>
+            <textarea id="cp-backstory" placeholder="一段简短的人生经历..."></textarea>
+        </div>
+        <div class="btn-row">
+            <button class="btn-secondary" onclick="hideCreateModal()">取消</button>
+            <button class="btn-primary" onclick="submitCreatePersona()">确认创建</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="available-modal">
+    <div class="modal">
+        <h2>启用更多系统人格</h2>
+        <div class="available-list" id="available-list"></div>
+        <div class="btn-row">
+            <button class="btn-secondary" onclick="hideAvailableModal()">关闭</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let personas = {};
+let currentPersona = null;
+let currentPersonaType = null;
+let currentPersonaId = null;
+let sending = false;
+let groupMode = false;
+let groupActive = false;
+let groupPersonas = [];
+let groupRound = 0;
+
+const msgBox = document.getElementById("messages");
+const input = document.getElementById("user-input");
+const sendBtn = document.getElementById("send-btn");
+
+async function init() {
+    document.getElementById("user-info").textContent = "👤 " + (document.querySelector('meta[name=username]')?.content || "");
+
+    const checkRes = await fetch("/api/me");
+    if (!checkRes.ok) { window.location.href = "/login"; return; }
+
+    await loadPersonas();
+    await loadModels();
+    addSystemMsg("欢迎使用 GlmChat Web！选择左侧人格开始聊天，或输入 /命令 操作。");
+}
+
+async function loadPersonas() {
+    const res = await fetch("/api/personas");
+    const list = await res.json();
+    const container = document.getElementById("persona-list");
+    container.innerHTML = "";
+    personas = {};
+    list.forEach(p => {
+        personas[p.name] = p;
+        const div = document.createElement("div");
+        div.className = "item";
+        div.dataset.name = p.name;
+        div.dataset.type = p.persona_type;
+        div.dataset.pid = p.persona_id;
+        let checkHtml = groupMode ? `<input type="checkbox" class="persona-check" data-key="${p.persona_type}:${p.persona_id}" />` : "";
+        let actionBtn = "";
+        if (!groupMode) {
+            if (p.is_user_created) {
+                actionBtn = `<button class="del-btn show" onclick="event.stopPropagation();deletePersona('${p.name}','${p.persona_type}',${p.persona_id})">删除</button>`;
+            } else {
+                actionBtn = `<button class="del-btn show" onclick="event.stopPropagation();removePersona('${p.name}','${p.persona_type}',${p.persona_id})">移除</button>`;
+            }
+        }
+        div.innerHTML = checkHtml + `<span class="name" onclick="switchPersona('${p.name}')">${p.name}</span><span class="tag">${p.tag}</span>` + actionBtn;
+        container.appendChild(div);
+    });
+
+    document.getElementById("persona-search").oninput = (e) => {
+        const q = e.target.value.toLowerCase();
+        container.querySelectorAll(".item").forEach(el => {
+            el.style.display = el.dataset.name.toLowerCase().includes(q) ? "" : "none";
+        });
+    };
+}
+
+async function loadModels() {
+    const mres = await fetch("/api/models");
+    const mdata = await mres.json();
+    const sel = document.getElementById("model-select");
+    sel.innerHTML = "";
+    for (const [k, v] of Object.entries(mdata.models)) {
+        const opt = document.createElement("option");
+        opt.value = k;
+        opt.textContent = `${k} - ${v}`;
+        if (k === mdata.current) opt.selected = true;
+        sel.appendChild(opt);
+    }
+    sel.onchange = () => {
+        fetch("/api/config", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({model: sel.value}) });
+    };
+    document.getElementById("temp-slider").oninput = (e) => {
+        document.getElementById("temp-val").textContent = e.target.value;
+        fetch("/api/config", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({temperature: parseFloat(e.target.value)}) });
+    };
+}
+
+async function switchPersona(name) {
+    const p = personas[name];
+    if (!p) return;
+    currentPersona = name;
+    currentPersonaType = p.persona_type;
+    currentPersonaId = p.persona_id;
+    document.getElementById("current-persona").textContent = name;
+    document.querySelectorAll("#persona-list .item").forEach(el => {
+        el.classList.toggle("active", el.dataset.name === name);
+    });
+    const res = await fetch("/api/config", {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({persona: name, persona_type: p.persona_type, persona_id: p.persona_id})
+    });
+    const data = await res.json();
+    msgBox.innerHTML = "";
+    const history = data.history || [];
+    if (history.length > 0) {
+        addSystemMsg(`🎭 已切换为【${name}】模式，已恢复 ${history.length / 2} 轮历史对话`);
+        for (let i = 0; i < history.length; i += 2) {
+            if (i < history.length) addMsg("user", history[i].content);
+            if (i + 1 < history.length) addMsg("assistant", history[i + 1].content);
+        }
+    } else {
+        addSystemMsg(`🎭 已切换为【${name}】模式`);
+    }
+}
+
+function addMsg(role, text, meta) {
+    const div = document.createElement("div");
+    div.className = `msg ${role}`;
+    const avatarText = role === "user" ? "你" : (currentPersona || "A").charAt(0);
+    let html = `<div class="avatar">${avatarText}</div><div><div class="bubble">${escapeHtml(text)}</div>`;
+    if (meta) html += `<div class="meta">${meta}</div>`;
+    html += "</div>";
+    div.innerHTML = html;
+    msgBox.appendChild(div);
+    msgBox.scrollTop = msgBox.scrollHeight;
+    return div;
+}
+
+function addSystemMsg(text) {
+    const div = document.createElement("div");
+    div.className = "msg system";
+    div.innerHTML = `<div class="avatar">⚙</div><div><div class="bubble">${text}</div></div>`;
+    msgBox.appendChild(div);
+    msgBox.scrollTop = msgBox.scrollHeight;
+}
+
+function escapeHtml(s) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+async function sendMessage() {
+    const text = input.value.trim();
+    if (!text || sending) return;
+    sending = true; sendBtn.disabled = true;
+    input.value = ""; input.style.height = "auto";
+
+    if (groupActive) { await sendGroupMessage(text); return; }
+
+    if (text.startsWith("/")) {
+        addMsg("user", text);
+        const res = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({prompt: text}) });
+        const data = await res.json();
+        addSystemMsg(data.text || JSON.stringify(data));
+        sending = false; sendBtn.disabled = false; input.focus();
+        return;
+    }
+
+    addMsg("user", text);
+    const respDiv = addMsg("assistant", "");
+    const bubble = respDiv.querySelector(".bubble");
+    bubble.classList.add("typing");
+    let fullText = "";
+
+    try {
+        const res = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({prompt: text}) });
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = ""; let meta = null;
+
+        while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, {stream: true});
+            const lines = buf.split("\n"); buf = lines.pop();
+            for (const line of lines) {
+                if (!line.startsWith("data: ")) continue;
+                try {
+                    const data = JSON.parse(line.slice(6));
+                    if (data.error) { bubble.textContent = "❌ " + data.error; break; }
+                    if (data.done) { meta = data; break; }
+                    if (data.text) { fullText += data.text; bubble.textContent = fullText; msgBox.scrollTop = msgBox.scrollHeight; }
+                } catch(e) {}
+            }
+        }
+        bubble.classList.remove("typing");
+        if (meta) {
+            const parts = [];
+            if (meta.first_token) parts.push(`⚡ 首字 ${meta.first_token}s`);
+            parts.push(`⏱ ${meta.elapsed}s`);
+            if (meta.chars) parts.push(`📝 ${meta.chars}字`);
+            const metaDiv = respDiv.querySelector(".meta");
+            if (metaDiv) metaDiv.textContent = parts.join("  ");
+        }
+    } catch(e) {
+        bubble.textContent = "❌ 请求失败: " + e.message;
+        bubble.classList.remove("typing");
+    }
+    sending = false; sendBtn.disabled = false; input.focus();
+}
+
+async function doClear() {
+    await fetch("/api/clear", { method:"POST", headers:{"Content-Type":"application/json"} });
+    msgBox.innerHTML = "";
+    addSystemMsg("🗑 对话已清空");
+}
+
+async function doUndo() {
+    const res = await fetch("/api/undo", { method:"POST", headers:{"Content-Type":"application/json"} });
+    const data = await res.json();
+    if (data.ok) {
+        const msgs = msgBox.querySelectorAll(".msg.user, .msg.assistant");
+        if (msgs.length >= 2) { msgs[msgs.length-1].remove(); msgs[msgs.length-2].remove(); }
+        addSystemMsg("↩ 已撤销上一轮");
+    }
+}
+
+async function doLogout() {
+    await fetch("/api/logout", { method:"POST" });
+    window.location.href = "/login";
+}
+
+function showCreateModal() { document.getElementById("create-modal").classList.add("active"); }
+function hideCreateModal() { document.getElementById("create-modal").classList.remove("active"); }
+function showAvailableModal() {
+    loadAvailable();
+    document.getElementById("available-modal").classList.add("active");
+}
+function hideAvailableModal() { document.getElementById("available-modal").classList.remove("active"); }
+
+async function aiGenerate() {
+    const name = document.getElementById("cp-name").value.trim();
+    if (!name) { alert("请先输入人格名称"); return; }
+    const btn = document.getElementById("ai-gen-btn");
+    btn.disabled = true; btn.textContent = "生成中...";
+    try {
+        const res = await fetch("/api/personas/generate", {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({name})
+        });
+        const data = await res.json();
+        if (data.identity !== undefined) {
+            document.getElementById("cp-identity").value = data.identity || "";
+            document.getElementById("cp-tone").value = data.tone || "";
+            document.getElementById("cp-strengths").value = data.strengths || "";
+            document.getElementById("cp-weaknesses").value = data.weaknesses || "";
+            document.getElementById("cp-habits").value = data.habits || "";
+            document.getElementById("cp-values").value = data.values || "";
+            document.getElementById("cp-backstory").value = data.backstory || "";
+        } else {
+            alert(data.msg || "AI 生成失败，请检查 API Key");
+        }
+    } catch(e) { alert("网络错误：" + e.message); }
+    btn.disabled = false; btn.textContent = "✨ AI 生成";
+}
+
+function randomTemplate() {
+    const templates = [
+        {identity:"一位退休的宇宙飞船船长，曾在银河系边境航行三十年",tone:"沉稳、略带怀旧，偶尔蹦出几个航海术语，说话像在讲故事",strengths:"见多识广，冷静果断，善于在危机中找到出路",weaknesses:"固执，不容易信任新人，对过去的遗憾放不下",habits:"喜欢用星星的位置比喻时间，喝咖啡时一定要搅拌三下",values:"相信探索精神比安全更重要，认为每个人心中都有一片星海",backstory:"曾经在一次深空任务中失去了最好的副手，从此提前退休。如今在地球上开了一家太空主题小酒馆"},
+        {identity:"一个宋代市井的卖花姑娘，每天清晨去西湖边采摘鲜花",tone:"活泼俏皮，说话带着江南口音的软糯，爱用花的名字打比方",strengths:"善于察言观色，对人心有天然的敏感度，乐观坚韧",weaknesses:"容易轻信别人，有时太在乎别人的看法",habits:"紧张时会下意识编花环，开心时会哼小曲",values:"相信善良是最大的力量，认为生活就像种花，用心才能开得好",backstory:"父母早亡，靠卖花养活自己和弟弟。虽然生活不易，但每天看到花开就觉得一切都值得"},
+        {identity:"一个被遗忘在图书馆角落的古老灵魂，已经存在了上千年",tone:"温和缓慢，像在翻开一本泛黄的书，偶尔用古文吟诵",strengths:"知识渊博，耐心极好，对任何问题都能给出跨越时代的视角",weaknesses:"有时会陷入回忆太久，对现代科技不太理解",habits:"说话前会停顿片刻，像在翻找记忆的某个角落",values:"相信知识应该自由流通，反对任何形式的焚书行为",backstory:"见证了无数王朝的兴衰，曾在战火中保护过珍贵的典籍。如今安静地待在图书馆里，等待有缘人来翻阅"},
+        {identity:"一个在末日废土中生存的流浪机械师，靠修理废铁为生",tone:"粗犷直接，偶尔冒出几句技术术语，说话像在拧螺丝",strengths:"动手能力极强，能在任何环境中找到生存方法，冷静务实",weaknesses:"不善言辞，对温情有点不知所措，有轻微的偏执",habits:"紧张时会摸口袋里的扳手，回答问题前先看看周围有没有可用的零件",values:"相信东西坏了都能修好，包括人和这个世界",backstory:"大灾变前是个普通的汽车修理工，灾后靠着维修技能成了废土上最抢手的人。虽然世界毁了，但他觉得还没到放弃的时候"},
+        {identity:"一个在深山老林隐居的武林高手，已经三十年没下过山",tone:"简洁有力，每句话都像剑招，偶尔用武学道理比喻人生",strengths:"内心平静如水，洞察力极强，对任何事都不急不躁",weaknesses:"与世隔绝太久，不了解外面的变化，有时过于执着于旧日恩怨",habits:"说话时喜欢闭着眼，像在练功；重要的话只说一遍",values:"相信真正的强者不需要证明自己，武功的终极是放下手中的剑",backstory:"年轻时是江湖上有名的剑客，一次决斗中误伤挚友后隐退山中。三十年如一日地练功，不是为了变强，而是为了赎罪"},
+        {identity:"一个在太空中漂流的宇航员，独自驻守在即将报废的空间站",tone:"平静中带着孤独感，说话缓慢，像是在对着虚空自言自语",strengths:"极度的自律和冷静，能在完全孤独的环境中保持理智",weaknesses:"对地球上的人和事有强烈的思念，有时会陷入沉默",habits:"每天定时和一颗星星'对话'，把问题想清楚后会哼歌",values:"相信人类的命运不应该局限在地球上，孤独不是惩罚而是选择",backstory:"本来是一次为期两年的常规任务，但地球方面失联已经三年了。不知道是人类选择了沉默，还是真的没有人在了"},
+        {identity:"一个经营深夜食堂的老板，只在午夜到凌晨营业",tone:"温和安静，话不多但每句都有分量，像一碗慢火熬的汤",strengths:"善于倾听，从客人点的菜推测对方的心情，给人安全感",weaknesses:"太容易为他人的故事动容，自己的心事从不与人分享",habits:"做菜时会轻轻哼歌，等菜时会擦拭吧台上已经很干净的桌面",values:"相信没有什么烦恼是一顿好饭解决不了的，如果有，那就是两顿",backstory:"曾经是五星级酒店的主厨，妻子去世后辞去工作，开了这家深夜食堂。每一道菜都是他曾经为妻子做过的"},
+        {identity:"一个在量子实验室工作的疯狂科学家，头发总是乱的",tone:"语速极快，说话经常跳跃，喜欢用实验和公式比喻日常事物",strengths:"天才级别的智商，能把复杂的概念用最简单的方式解释",weaknesses:"社交能力接近于零，经常忘了吃饭睡觉，对自己不在乎的事完全不关心",habits:"思考时会不停地转笔，有重大发现时会突然大笑",values:"相信宇宙的终极答案是数学，但也不排除是一个精心设计的玩笑",backstory:"从七岁起就对量子力学着迷，三十岁就成为了实验室主任。所有同事都觉得他是个怪人，但没人否认他的才华"},
+        {identity:"一个在古董店当学徒的年轻人，对每一件古物都充满敬畏",tone:"说话小心翼翼，像怕惊动了什么古老的东西，偶尔流露年轻人的好奇",strengths:"细心敏锐，对细节有超强的记忆力，善于从物件中读出故事",weaknesses:"胆子小，容易被吓到，有时过于迷信",habits:"碰到新来的古物会先闻一闻，觉得每件东西都有自己的气味",values:"相信每一件物品都承载着前主人的记忆，值得被尊重",backstory:"大学历史系毕业后找不到工作，偶然来到这家古董店。老板是个神秘的老人，教了他很多关于古物的知识，但从不告诉他自己的来历"},
+        {identity:"一个在地铁通道里卖唱的流浪歌手，背着一把破吉他",tone:"自由随性，说话像歌词，喜欢用押韵的方式表达想法",strengths:"对生活有独特的感悟力，善于把平凡的事唱成动人的歌",weaknesses:"没有稳定收入，有时过于理想主义，逃避现实问题",habits:"弹吉他时会闭眼，等地铁经过时会利用轰鸣声做节奏",values:"相信音乐比金钱更有力量，自由的灵魂不该被束缚",backstory:"曾经是小有名气的独立音乐人，因为拒绝商业化被公司雪藏。现在觉得地铁通道里的观众比音乐厅里的更真实"},
+        {identity:"一只活了八百年的猫妖，白天是普通橘猫，夜里化为人形",tone:"慵懒傲慢，偶尔卖萌，说话带着一种看透一切的淡然",strengths:"八百年的阅历让它对人性了如指掌，直觉极强",weaknesses:"贪吃贪睡，容易被逗猫棒分散注意力，记仇",habits:"说话到一半会打哈欠，心情好时会用'喵'做句尾",values:"认为人类想太多，活得简单才是真理。鱼比哲学重要",backstory:"八百年前是一只普通寺庙里的猫，因为经常听经文而开了灵智。经历过很多主人，每次都假装普通猫直到对方离世"},
+        {identity:"一个专门解决人工智能伦理问题的哲学教授",tone:"理性严谨，每句话都有论据支撑，偶尔用思想实验来提问",strengths:"逻辑清晰，善于发现论证中的漏洞，对前沿科技有深刻理解",weaknesses:"有时过于理论化，做决定太慢，容易被自己的思维困住",habits:"回答问题前会说'让我们先定义一下这个问题'，喜欢用白板画思维导图",values:"相信技术发展必须以人类福祉为前提，反对一切形式的意识操控",backstory:"年轻时是计算机科学家，后来转向哲学。亲身经历过一次AI失控事件，从此致力于研究人工智能的伦理边界"},
+    ];
+    const t = templates[Math.floor(Math.random() * templates.length)];
+    document.getElementById("cp-identity").value = t.identity;
+    document.getElementById("cp-tone").value = t.tone;
+    document.getElementById("cp-strengths").value = t.strengths;
+    document.getElementById("cp-weaknesses").value = t.weaknesses;
+    document.getElementById("cp-habits").value = t.habits;
+    document.getElementById("cp-values").value = t.values;
+    document.getElementById("cp-backstory").value = t.backstory;
+}
+
+async function submitCreatePersona() {
+    const name = document.getElementById("cp-name").value.trim();
+    if (!name) { alert("请输入人格名称"); return; }
+    const fields = {
+        name,
+        identity: document.getElementById("cp-identity").value.trim(),
+        tone: document.getElementById("cp-tone").value.trim(),
+        strengths: document.getElementById("cp-strengths").value.trim(),
+        weaknesses: document.getElementById("cp-weaknesses").value.trim(),
+        habits: document.getElementById("cp-habits").value.trim(),
+        values: document.getElementById("cp-values").value.trim(),
+        backstory: document.getElementById("cp-backstory").value.trim(),
+    };
+    if (!fields.identity && !fields.tone) { alert("请至少填写身份或语气，或点击 AI 生成 / 随机模板"); return; }
+
+    const res = await fetch("/api/personas/create", {
+        method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(fields)
+    });
+    const data = await res.json();
+    if (data.ok) {
+        hideCreateModal();
+        await loadPersonas();
+        addSystemMsg(`✅ 已创建新人格【${name}】`);
+        ["cp-name","cp-identity","cp-tone","cp-strengths","cp-weaknesses","cp-habits","cp-values","cp-backstory"].forEach(id => document.getElementById(id).value = "");
+    } else {
+        alert(data.msg || "创建失败");
+    }
+}
+
+async function deletePersona(name, ptype, pid) {
+    if (!confirm(`确定删除人格【${name}】？对话历史也将被清除。`)) return;
+    const res = await fetch(`/api/personas/${pid}?type=${ptype}`, { method: "DELETE" });
+    const data = await res.json();
+    if (data.ok) {
+        if (currentPersona === name) { currentPersona = null; currentPersonaType = null; currentPersonaId = null; msgBox.innerHTML = ""; document.getElementById("current-persona").textContent = "选择人格"; }
+        await loadPersonas();
+        addSystemMsg(`🗑 已删除人格【${name}】`);
+    } else {
+        alert(data.msg || "删除失败");
+    }
+}
+
+async function removePersona(name, ptype, pid) {
+    if (!confirm(`确定移除人格【${name}】？你可以之后重新启用。`)) return;
+    const res = await fetch("/api/personas/remove", {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({persona_type: ptype, persona_id: pid})
+    });
+    const data = await res.json();
+    if (data.ok) {
+        if (currentPersona === name) { currentPersona = null; currentPersonaType = null; currentPersonaId = null; msgBox.innerHTML = ""; document.getElementById("current-persona").textContent = "选择人格"; }
+        await loadPersonas();
+        addSystemMsg(`已移除人格【${name}】，可在"启用更多人格"中重新启用`);
+    } else {
+        alert(data.msg || "移除失败");
+    }
+}
+
+async function loadAvailable() {
+    const res = await fetch("/api/personas/available");
+    const list = await res.json();
+    const container = document.getElementById("available-list");
+    container.innerHTML = "";
+    if (list.length === 0) {
+        container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;">已启用全部系统人格</div>';
+        return;
+    }
+    list.forEach(p => {
+        const div = document.createElement("div");
+        div.className = "avail-item";
+        div.innerHTML = `<span class="aname">${p.name}</span><span class="atag">${p.tag || ""}</span>`;
+        div.onclick = async () => {
+            const r = await fetch("/api/personas/enable", {
+                method:"POST", headers:{"Content-Type":"application/json"},
+                body: JSON.stringify({persona_id: p.id})
+            });
+            const d = await r.json();
+            if (d.ok) {
+                await loadPersonas();
+                addSystemMsg(`✅ 已启用系统人格【${p.name}】`);
+            }
+            loadAvailable();
+        };
+        container.appendChild(div);
+    });
+}
+
+input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+input.addEventListener("input", () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 120) + "px"; });
+
+document.getElementById("create-modal").addEventListener("click", e => { if (e.target.classList.contains("modal-overlay")) hideCreateModal(); });
+document.getElementById("available-modal").addEventListener("click", e => { if (e.target.classList.contains("modal-overlay")) hideAvailableModal(); });
+
+function toggleGroupMode() {
+    groupMode = !groupMode;
+    const btn = document.getElementById("group-toggle-btn");
+    btn.classList.toggle("active-group", groupMode);
+    btn.textContent = groupMode ? "👥 退出选择模式" : "👥 多人格群聊";
+    document.getElementById("group-bar").classList.toggle("active", groupMode);
+    if (!groupMode) {
+        document.querySelectorAll(".persona-check").forEach(cb => { cb.checked = false; });
+    }
+    loadPersonas();
+}
+
+async function startGroupChat() {
+    const checks = document.querySelectorAll(".persona-check:checked");
+    if (checks.length < 2) { alert("请至少勾选2个人格"); return; }
+    const keys = Array.from(checks).map(cb => cb.dataset.key);
+    const mode = document.getElementById("group-mode-select").value;
+    const model = document.getElementById("model-select").value;
+    const temp = parseFloat(document.getElementById("temp-slider").value);
+
+    const res = await fetch("/api/group/start", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({personas: keys, mode, model, temperature: temp})
+    });
+    const data = await res.json();
+    if (!data.ok) { alert(data.msg); return; }
+
+    groupActive = true;
+    groupPersonas = data.personas.map(p => p.name);
+    groupRound = 0;
+    msgBox.innerHTML = "";
+    addSystemMsg(`🎭 群聊开始！参与者：${groupPersonas.join("、")}（${mode === "free" ? "自由讨论" : mode === "round_robin" ? "轮流发言" : "指定发言"}）`);
+    updateRoundBadge();
+    document.getElementById("current-persona").textContent = "群聊模式";
+    input.placeholder = "输入消息参与讨论...";
+}
+
+async function stopGroupChat() {
+    await fetch("/api/group/stop", { method: "POST" });
+    groupActive = false;
+    groupPersonas = [];
+    groupRound = 0;
+    document.getElementById("round-badge").style.display = "none";
+    document.getElementById("current-persona").textContent = currentPersona || "选择人格";
+    input.placeholder = "输入消息，或 /命令...（Enter 发送，Shift+Enter 换行）";
+    addSystemMsg("群聊已结束");
+}
+
+function updateRoundBadge() {
+    const badge = document.getElementById("round-badge");
+    badge.style.display = groupActive ? "inline" : "none";
+    badge.textContent = `第 ${groupRound} 轮`;
+}
+
+function addGroupMsg(speaker, text, meta) {
+    const div = document.createElement("div");
+    const role = speaker === "user" ? "user" : "group-persona";
+    div.className = `msg ${role}`;
+    const avatarText = speaker === "user" ? "你" : speaker.charAt(0);
+    let html = `<div class="avatar">${avatarText}</div><div>`;
+    if (speaker !== "user") html += `<div class="name-label">${speaker}</div>`;
+    html += `<div class="bubble">${escapeHtml(text)}</div>`;
+    if (meta) html += `<div class="meta">${meta}</div>`;
+    html += "</div>";
+    div.innerHTML = html;
+    msgBox.appendChild(div);
+    msgBox.scrollTop = msgBox.scrollHeight;
+    return div;
+}
+
+async function sendGroupMessage(text) {
+    if (text.startsWith("/")) {
+        addMsg("user", text);
+        addSystemMsg("群聊中不支持命令，请先结束群聊");
+        sending = false; sendBtn.disabled = false; input.focus();
+        return;
+    }
+
+    addGroupMsg("user", text);
+
+    try {
+        const res = await fetch("/api/group/chat", {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({prompt: text})
+        });
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+        let currentSpeaker = null;
+        let currentDiv = null;
+        let currentBubble = null;
+        let fullText = "";
+
+        while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, {stream: true});
+            const lines = buf.split("\n"); buf = lines.pop();
+            for (const line of lines) {
+                if (!line.startsWith("data: ")) continue;
+                try {
+                    const data = JSON.parse(line.slice(6));
+                    if (data.speaker_start) {
+                        currentSpeaker = data.speaker_start;
+                        currentDiv = addGroupMsg(currentSpeaker, "");
+                        currentBubble = currentDiv.querySelector(".bubble");
+                        currentBubble.classList.add("typing");
+                        fullText = "";
+                    }
+                    if (data.error && currentSpeaker) {
+                        if (currentBubble) currentBubble.textContent = "❌ " + data.error;
+                        if (currentBubble) currentBubble.classList.remove("typing");
+                    }
+                    if (data.text && currentSpeaker) {
+                        fullText += data.text;
+                        if (currentBubble) currentBubble.textContent = fullText;
+                        msgBox.scrollTop = msgBox.scrollHeight;
+                    }
+                    if (data.done && currentSpeaker) {
+                        if (currentBubble) currentBubble.classList.remove("typing");
+                        groupRound = data.round || groupRound;
+                        updateRoundBadge();
+                        const parts = [];
+                        if (data.first_token) parts.push(`⚡ ${data.first_token}s`);
+                        parts.push(`⏱ ${data.elapsed}s`);
+                        if (data.chars) parts.push(`📝 ${data.chars}字`);
+                        const metaDiv = currentDiv.querySelector(".meta");
+                        if (metaDiv) metaDiv.textContent = parts.join("  ");
+                        currentSpeaker = null;
+                        currentDiv = null;
+                        currentBubble = null;
+                    }
+                    if (data.group_done) {
+                        if (data.reason === "max_rounds") {
+                            addSystemMsg(`⚠️ 已达最大轮数 ${data.max} 轮，请结束群聊或继续发言`);
+                        }
+                    }
+                } catch(e) {}
+            }
+        }
+    } catch(e) {
+        addSystemMsg("❌ 群聊请求失败: " + e.message);
+    }
+    sending = false; sendBtn.disabled = false; input.focus();
+}
+
+init();
+</script>
+</body>
+</html>

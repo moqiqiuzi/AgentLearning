@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GlmChat - 登录</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #0f0f0f; color: #e0e0e0; height: 100vh; display: flex; align-items: center; justify-content: center; }
+.card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 40px; width: 360px; }
+.card h1 { text-align: center; margin-bottom: 24px; font-size: 22px; }
+.card .field { margin-bottom: 16px; }
+.card label { display: block; font-size: 13px; color: #888; margin-bottom: 6px; }
+.card input {
+    width: 100%; background: #2a2a2a; color: #e0e0e0; border: 1px solid #333;
+    border-radius: 6px; padding: 10px 12px; font-size: 14px; outline: none;
+}
+.card input:focus { border-color: #2d5aa0; }
+.card .btn {
+    width: 100%; background: #2d5aa0; color: #fff; border: none;
+    border-radius: 6px; padding: 10px; font-size: 15px; cursor: pointer; margin-top: 8px;
+}
+.card .btn:hover { background: #3670c0; }
+.card .btn:disabled { background: #333; cursor: not-allowed; }
+.card .msg { text-align: center; font-size: 13px; margin-top: 12px; }
+.card .msg.error { color: #e55; }
+.card .msg.success { color: #5a5; }
+.card .link { text-align: center; margin-top: 16px; font-size: 13px; }
+.card .link a { color: #5a8fd4; text-decoration: none; }
+.card .link a:hover { text-decoration: underline; }
+.settings-row { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; font-size: 13px; color: #888; }
+.toggle { position: relative; width: 40px; height: 22px; background: #333; border-radius: 11px; cursor: pointer; transition: background 0.3s; }
+.toggle.on { background: #2d5aa0; }
+.toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: #fff; border-radius: 50%; transition: transform 0.3s; }
+.toggle.on::after { transform: translateX(18px); }
+</style>
+</head>
+<body>
+<div class="card">
+    <h1>GlmChat 登录</h1>
+    <div class="field">
+        <label>用户名</label>
+        <input type="text" id="username" placeholder="请输入用户名" autofocus />
+    </div>
+    <div class="field">
+        <label>密码</label>
+        <input type="password" id="password" placeholder="请输入密码" />
+    </div>
+    <button class="btn" id="login-btn" onclick="doLogin()">登录</button>
+    <div class="msg" id="msg"></div>
+    <div class="link">没有账号？<a href="/register">注册一个</a></div>
+    <div class="settings-row">
+        <span>狼人杀特效</span>
+        <div class="toggle on" id="anim-toggle"></div>
+    </div>
+</div>
+<script>
+async function doLogin() {
+    const btn = document.getElementById("login-btn");
+    const msg = document.getElementById("msg");
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value;
+    if (!username || !password) { msg.className="msg error"; msg.textContent="请填写用户名和密码"; return; }
+    btn.disabled = true;
+    try {
+        const res = await fetch("/api/login", {
+            method: "POST", headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({username, password}), credentials: "same-origin"
+        });
+        const data = await res.json();
+        if (data.ok) {
+            msg.className = "msg success"; msg.textContent = "登录成功，跳转中...";
+            setTimeout(() => { window.location.href = "/"; }, 500);
+        } else {
+            msg.className = "msg error"; msg.textContent = data.msg || "登录失败";
+            btn.disabled = false;
+        }
+    } catch(e) { msg.className="msg error"; msg.textContent="网络错误"; btn.disabled=false; }
+}
+document.getElementById("password").addEventListener("keydown", e => { if(e.key==="Enter") doLogin(); });
+const animToggle = document.getElementById("anim-toggle");
+animToggle.className = "toggle" + (localStorage.getItem("ww_anim") !== "off" ? " on" : "");
+animToggle.onclick = () => {
+    const isOn = animToggle.classList.toggle("on");
+    localStorage.setItem("ww_anim", isOn ? "on" : "off");
+};
+</script>
+</body>
+</html>
